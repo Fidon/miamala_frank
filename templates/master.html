@@ -1,0 +1,123 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="csrf-token" content="{{ csrf_token }}" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="shortcat icon" href="{% static 'imgs/logo.png' %}" />
+    <title>{% block title %}{% endblock %} || Frank App</title>
+    <link href="{% static 'fontawesome-6.2.1/css/all.min.css' %}" rel="stylesheet" type="text/css" />
+    <link href="{% static 'scss/custom.css' %}" rel="stylesheet" type="text/css" />
+    <link href="{% static 'css/master.css' %}" rel="stylesheet" type="text/css" />
+    {% block styles %}{% endblock %}
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <button class="sidebar-toggle" id="sidebarToggle">
+            <i class="fas fa-bars"></i>
+        </button>
+        <a href="{% url 'dashboard_page' %}" class="logo">
+            <div class="logo-icon">
+                <i class="fas fa-boxes"></i>
+            </div>
+            <span>Frank App</span>
+        </a>
+    </header>
+
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <ul class="sidebar-nav">
+            <li class="nav-item">
+                <a href="{% url 'dashboard_page' %}" class="nav-link dashboard">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+            </li>
+            {% if request.user.is_admin %}
+            <li class="nav-item">
+                <a href="{% url 'shops_page' %}" class="nav-link shops">
+                    <i class="fas fa-store"></i>
+                    <span>Shops</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{% url 'products_page' %}" class="nav-link store">
+                    <i class="fas fa-warehouse"></i>
+                    <span>Stock</span>
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item">
+                <a href="{% url 'sales_page' %}" class="nav-link sales">
+                    <i class="fas fa-receipt"></i>
+                    <span>Sales</span>
+                </a>
+            </li>
+            <li class="nav-item nav-dropdown">
+                <a href="#" class="nav-dropdown-toggle" id="sales_toggle">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Sales Reports</span>
+                    <i class="fas fa-chevron-down" style="margin-left: auto; font-size: 0.8rem;"></i>
+                </a>
+                <ul class="nav-dropdown-menu">
+                    <li><a href="{% url 'sales_report' %}" class="nav-link s_report">Sales</a></li>
+                    <li><a href="{% url 'sale_items_report' %}" class="nav-link s_items">Sale items</a></li>
+                </ul>
+            </li>
+            {% if request.user.is_admin %}
+            <li class="nav-item">
+                <a href="{% url 'crips_page' %}" class="nav-link crips">
+                    <i class="fas fa-pizza-slice"></i>
+                    <span>Crips</span>
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item">
+                <a href="{% url 'user_profile' %}" class="nav-link profile">
+                    <i class="fas fa-user"></i>
+                    <span>Profile</span>
+                </a>
+            </li>
+            {% if request.user.is_admin %}
+            <li class="nav-item">
+                <a href="{% url 'users_page' %}" class="nav-link users">
+                    <i class="fas fa-users"></i>
+                    <span>Users</span>
+                </a>
+            </li>
+            {% endif %}
+            <li class="nav-item">
+                <a href="{% url 'user_logout' %}" class="nav-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+        <main class="main-content" id="mainContent">
+            {% block contents %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container-fluid">
+            <p>&copy; Frank App | All rights reserved @ 2025</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="{% static 'js/jquery-3.6.1.min.js' %}"></script>
+    <script src="{% static 'bootstrap-5.3.0/js/bootstrap.bundle.min.js' %}"></script>
+    <script src="{% static 'js/main.js' %}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
