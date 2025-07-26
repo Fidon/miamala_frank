@@ -65,3 +65,41 @@ def format_number(value):
         return f"{value:.1f}".rstrip('0').rstrip('.')
     else:
         return f"{value:.2f}".rstrip('0').rstrip('.')
+    
+
+# selcomPay profit calculation per transaction
+def selcom_profit(amount):
+    amount = float(amount)
+    charge_ranges = {
+        (1000, 4999): 400,
+        (5000, 9999): 800,
+        (10000, 19999): 1000,
+        (20000, 39999): 1500,
+        (40000, 49999): 2000,
+        (50000, 99999): 2500,
+        (100000, 199999): 3300,
+        (200000, 299999): 4500
+    }
+    for charge_range, charge_value in charge_ranges.items():
+        lower_limit, upper_limit = charge_range
+        if lower_limit <= amount <= upper_limit:
+            return abs((amount * 0.013) - charge_value)
+    return 0.0
+
+# Lipanamba profit calculation per transaction
+def lipa_profit(amount):
+    amount = float(amount)
+    charge_ranges = {
+        (1000, 4999): 300,
+        (5000, 19999): 500,
+        (20000, 49999): 800,
+        (50000, 99999): 1000,
+        (100000, 199999): 1500,
+        (200000, 299999): 2000,
+        (300000, 1000000): 2500
+    }
+    for charge_range, charge_value in charge_ranges.items():
+        lower_limit, upper_limit = charge_range
+        if lower_limit <= amount <= upper_limit:
+            return charge_value
+    return 0.0

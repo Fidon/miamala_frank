@@ -1,3 +1,52 @@
 from django.db import models
 
-# Create your models here.
+# selcomPay transactions model
+class Selcompay(models.Model):
+    id = models.AutoField(primary_key=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    name = models.CharField(default='no-name', max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.TextField(null=True, default=None)
+    deleted = models.BooleanField(null=True, default=False)
+
+    def __str__(self):
+        return str(self.amount)
+    
+
+# lipaNamba transactions model
+class Lipanamba(models.Model):
+    id = models.AutoField(primary_key=True)
+    created_at = models.DateTimeField(auto_now=True)
+    name = models.CharField(default='no-name', max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.TextField(null=True, default=None)
+    deleted = models.BooleanField(null=True, default=False)
+
+    def __str__(self):
+        return str(self.amount)
+    
+# Debts transactions model
+class Debts(models.Model):
+    id = models.AutoField(primary_key=True)
+    created_at = models.DateTimeField(auto_now=True)
+    name = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    description = models.TextField(null=True, default=None)
+    deleted = models.BooleanField(null=True, default=False)
+
+    def __str__(self):
+        return str(self.name)
+    
+# Loans transactions model
+class Loans(models.Model):
+    id = models.AutoField(primary_key=True)
+    created_at = models.DateTimeField(auto_now=True)
+    name = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    description = models.TextField(null=True, default=None)
+    deleted = models.BooleanField(null=True, default=False)
+
+    def __str__(self):
+        return str(self.name)

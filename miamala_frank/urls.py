@@ -12,5 +12,5 @@ urlpatterns = [
     path('shops/', include('apps.shops.urls')),
     path('crips/', include('apps.crips.urls')),
     path('dashboard/', include('apps.dashboard.urls')),
-    # path('apps/', include('apps.miamala.urls')),
+    path('apps/', include('apps.miamala.urls')),
 ]

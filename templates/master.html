@@ -87,6 +87,19 @@
                     <span>Users</span>
                 </a>
             </li>
+            <li class="nav-item nav-dropdown">
+                <a href="#" class="nav-dropdown-toggle" id="transactions_toggle">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <span>Miamala</span>
+                    <i class="fas fa-chevron-down" style="margin-left: auto; font-size: 0.8rem;"></i>
+                </a>
+                <ul class="nav-dropdown-menu">
+                    <li><a href="{% url 'selcompay_page' %}" class="nav-link selcom">SelcomPay</a></li>
+                    <li><a href="{% url 'lipanamba_page' %}" class="nav-link lipa">LIPA</a></li>
+                    <li><a href="{% url 'debts_page' %}" class="nav-link debts">Madeni</a></li>
+                    <li><a href="{% url 'loans_page' %}" class="nav-link loans">Mikopo</a></li>
+                </ul>
+            </li>
             {% endif %}
             <li class="nav-item">
                 <a href="{% url 'user_logout' %}" class="nav-link">

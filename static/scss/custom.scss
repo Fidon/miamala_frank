@@ -11,6 +11,7 @@ $accent: #FFD23F; // Bright Yellow
 $background: #FFF8F0; // Soft Cream
 $text-color: #2D3748; // Charcoal
 $extra_color: #FF6B35; // Redefined for datatables buttons
+$blu_color: #34699A;
 
 // Merge custom colors into Bootstrap theme
 $theme-colors: map-merge($theme-colors, (
@@ -20,6 +21,7 @@ $theme-colors: map-merge($theme-colors, (
   "background": $background,
   "charcoal": $text-color,
   "extra": $extra_color,
+  "dblue": $blu_color,
 ));
 
 // Optional utility colors if needed individually
@@ -30,6 +32,7 @@ $custom-colors: (
   "soft-cream": $background,
   "charcoal": $text-color,
   "orange-again": $extra_color,
+  "dry-blue": $blu_color,
 );
 
 // Include all of Bootstrap

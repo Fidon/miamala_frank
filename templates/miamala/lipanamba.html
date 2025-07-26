@@ -1,0 +1,162 @@
+{% extends 'master.html' %}
+{% load static %}
+{% block title %}
+  Lipanamba transactions
+{% endblock %}
+{% block styles %}
+  <link href="{% static 'css/miamala/lipanamba.css' %}" rel="stylesheet" type="text/css" />
+  <link href="{% static 'datatables/DataTables-1.13.6/css/dataTables.bootstrap5.css' %}" rel="stylesheet" type="text/css" />
+{% endblock %}
+{% block contents %}
+  <div class="search-box input-group w-100 float-start">
+    <input type="text" class="form-control" id="search_lipa_field" placeholder="Search.." autocomplete="off" />
+    <button type="button" class="btn btn-primary text-white ms-1" id="lipanamba_filter_clear" title="Clear filters"><i class="fas fa-refresh"></i></button>
+    <button type="button" class="btn btn-charcoal text-white ms-1" title="New transaction" data-bs-toggle="modal" data-bs-target="#new_lipa_modal"><i class="fas fa-plus-circle"></i></button>
+  </div>
+
+  <div class="table-container" id="table_container">
+    <div class="table-responsive">
+      <table class="table table-striped table-hover" id="lipanamba_table">
+        <thead>
+          <tr>
+            <th>S/N</th>
+            <th>Date</th>
+            <th>Name</th>
+            <th>Amount</th>
+            <th>Profit</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tfoot class="text-center text-charcoal">
+          <tr>
+          <th>TOTAL:</th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th></th>
+          <th></th>
+        </tr>
+      </tfoot>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}modal to add new transaction{% endcomment %}
+  <div class="modal fade" id="new_lipa_modal">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <form class="modal-content" id="new_lipa_transaction_form" action="{% url 'lipanamba_actions' %}" autocomplete="off">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Add new transaction</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="text" class="form-control" id="lipa_names" placeholder="p" required />
+            <label for="lipa_names" class="form-label">Names</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="number" min="1000" step="0.1" class="form-control" id="lipa_amount" placeholder="p" required />
+            <label for="lipa_amount" class="form-label">Amount</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <textarea class="form-control" id="lipa_description" placeholder="p" style="min-height:130px"></textarea>
+            <label for="lipa_description" class="form-label">Description (optional)</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger d-inline-block me-3" data-bs-dismiss="modal">Back</button>
+          <button type="submit" class="btn btn-success d-inline-block" id="lipa_trans_btn">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}modal to filter dates{% endcomment %}
+  <div class="modal fade" id="dateFilterModal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Filter transaction date</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="date" max="{% now 'Y-m-d' %}" class="form-control" id="min_trans_date" placeholder="d" />
+            <label for="min_trans_date" class="form-label">Start date</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="date" class="form-control" id="max_trans_date" placeholder="d" />
+            <label for="max_trans_date" class="form-label">End date</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="fas fa-long-arrow-left"></i></button>
+          <button type="button" class="btn btn-primary text-white" id="date_filter_clear"><i class="fas fa-refresh"></i></button>
+          <button type="button" class="btn btn-success" data-bs-dismiss="modal" id="date_filter_btn"><i class="fas fa-check-circle"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% comment %}modal to edit transaction details{% endcomment %}
+  <div class="modal fade" id="update_lipa_modal">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <form class="modal-content" id="edit_lipa_transaction_form" action="{% url 'lipanamba_actions' %}" autocomplete="off">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Update transaction details</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="text" class="form-control" id="lipa_edit_names" placeholder="p" required />
+            <label for="lipa_edit_names" class="form-label">Names</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="number" min="1000" step="0.1" class="form-control" id="lipa_edit_amount" placeholder="p" required />
+            <label for="lipa_edit_amount" class="form-label">Amount</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <textarea class="form-control" id="lipa_edit_description" placeholder="p" style="min-height:130px"></textarea>
+            <label for="lipa_edit_description" class="form-label">Description (optional)</label>
+          </div>
+        </div>
+        <input type="hidden" id="transaction_id" />
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger d-inline-block me-3" data-bs-dismiss="modal">Back</button>
+          <button type="submit" class="btn btn-success d-inline-block" id="lipa_edit_trans_btn">Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}delete lipa transaction{% endcomment %}
+  <div class="modal fade" id="delete_lipa_modal">
+    <div class="modal-dialog">
+      <form class="modal-content" id="del_lipa_form" action="{% url 'lipanamba_actions' %}" autocomplete="off">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Delete lipa transaction</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-2 py-3 text-center">
+            <h6 class="text-charcoal">Are you sure to delete this lipa transaction..?</h6>
+          </div>
+          <input type="hidden" id="lipa_del_id" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success text-white d-inline-block me-3" data-bs-dismiss="modal">No</button>
+          <button type="submit" class="btn btn-danger d-inline-block" id="lipa_delete_btn">Yes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <input type="hidden" id="lipanamba_page_url" value="{% url 'lipanamba_page' %}">
+{% endblock %}
+{% block scripts %}
+  <script src="{% static 'datatables/datatables.min.js' %}"></script>
+  <script src="{% static 'js/miamala/lipanamba.js' %}"></script>
+{% endblock %}
