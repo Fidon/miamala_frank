@@ -75,6 +75,12 @@
             </li>
             {% endif %}
             <li class="nav-item">
+                <a href="{% url 'expenses_page' %}" class="nav-link expenses">
+                    <i class="fas fa-list-check"></i>
+                    <span>Expenses</span>
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="{% url 'user_profile' %}" class="nav-link profile">
                     <i class="fas fa-user"></i>
                     <span>Profile</span>

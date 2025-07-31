@@ -1,4 +1,6 @@
 from django.db import models
+from apps.shops.models import Shop
+from apps.users.models import CustomUser
 
 # selcomPay transactions model
 class Selcompay(models.Model):
@@ -11,7 +13,6 @@ class Selcompay(models.Model):
 
     def __str__(self):
         return str(self.amount)
-    
 
 # lipaNamba transactions model
 class Lipanamba(models.Model):
@@ -50,3 +51,18 @@ class Loans(models.Model):
 
     def __str__(self):
         return str(self.name)
+
+# Expenses model
+class Expenses(models.Model):
+    id = models.AutoField(primary_key=True)
+    created_at = models.DateTimeField(auto_now=True)
+    dates = models.DateField()
+    title = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.TextField(null=True, default=None)
+    deleted = models.BooleanField(null=True, default=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.PROTECT, related_name='exp_user')
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, related_name='exp_shop')
+
+    def __str__(self):
+        return str(self.title)

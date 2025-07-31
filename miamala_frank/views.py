@@ -16,3 +16,4 @@ def error_404(request, exception):
 
 def error_403(request, exception):
     return render(request, '403.html', status=403)
+

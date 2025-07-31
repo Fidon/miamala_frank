@@ -1,0 +1,220 @@
+{% extends 'master.html' %}
+{% load static %}
+{% block title %}
+  Expenses
+{% endblock %}
+{% block styles %}
+  <link href="{% static 'css/miamala/expenses.css' %}" rel="stylesheet" type="text/css" />
+  <link href="{% static 'datatables/DataTables-1.13.6/css/dataTables.bootstrap5.css' %}" rel="stylesheet" type="text/css" />
+{% endblock %}
+{% block contents %}
+  <div class="search-box input-group w-100 float-start">
+    <input type="text" class="form-control" id="search_exp_field" placeholder="Search.." autocomplete="off" />
+    <button type="button" class="btn btn-primary text-white ms-1" id="expense_filter_clear" title="Clear filters"><i class="fas fa-refresh"></i></button>
+    <button class="btn btn-charcoal text-white ms-1" type="button" data-bs-toggle="modal" data-bs-target="#new_exp_modal" title="New expense"><i class="fas fa-plus-circle"></i></button>
+  </div>
+
+  <div class="table-container" id="table_container">
+    <div class="table-responsive">
+      <table class="table table-striped table-hover" id="expenses_table">
+        <thead>
+          <tr>
+            <th>S/n</th>
+            <th>Date</th>
+            <th>Names</th>
+            <th>Amount</th>
+            <th>User</th>
+            <th>Shop</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tfoot class="text-center text-charcoal">
+          <tr>
+            <th>TOTAL:</th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+        </tr>
+      </tfoot>
+      </table>
+    </div>
+  </div>
+
+  {% comment %}add new expense{% endcomment %}
+  <div class="modal fade" id="new_exp_modal">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <form class="modal-content" id="new_exp_form" action="{% url 'expenses_actions' %}" autocomplete="off">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Add new expense</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="date" class="form-control" id="exp_date" name="dates" value="{% now 'Y-m-d' %}" max="{% now 'Y-m-d' %}" placeholder="p" required />
+            <label for="exp_date" class="form-label">Expense date</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-2">
+            <input type="text" class="form-control" id="exp_title" name="title" placeholder="p" required />
+            <label for="exp_title" class="form-label">Expense title</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-2">
+            <input type="number" min="1" step="0.1" class="form-control" id="exp_amount" name="amount" placeholder="p" required />
+            <label for="exp_amount" class="form-label">Expense amount</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-2">
+            <textarea class="form-control" id="exp_description" name="describe" placeholder="p" style="min-height:130px"></textarea>
+            <label for="exp_description" class="form-label">Description (optional)</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary text-white d-inline-block me-2" data-bs-dismiss="modal">Back</button>
+          <button type="submit" class="btn btn-success d-inline-block" id="new_exp_btn">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}filter dates{% endcomment %}
+  <div class="modal fade" id="dateFilterModal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Filter expense dates</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-floating d-block w-100 float-start my-2">
+            <input type="date" max="{% now 'Y-m-d' %}" class="form-control" id="min_exp_date" placeholder="d" />
+            <label for="min_exp_date">Start date</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-2">
+            <input type="date" class="form-control" id="max_exp_date" placeholder="d" />
+            <label for="max_exp_date">End date</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary text-white" data-bs-dismiss="modal"><i class="fas fa-long-arrow-left"></i></button>
+          <button type="button" class="btn btn-primary text-white" id="date_filter_clear"><i class="fas fa-refresh"></i></button>
+          <button type="button" class="btn btn-success" data-bs-dismiss="modal" id="date_filter_btn"><i class="fas fa-check-circle"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% comment %}view expense{% endcomment %}
+  <div class="modal fade" id="view_exp_modal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Expense details..</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body text-start text-ttxt1">
+          <div class="details w-100 float-start py-3">
+            <div class="form-floating d-block w-100 float-start my-1">
+              <strong>Record date:</strong> &nbsp; <span id="date_record"></span>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-1">
+              <strong>User:</strong> &nbsp; <span id="user_expense"></span>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-1">
+              <strong>Shop:</strong> &nbsp; <span id="shop_expense"></span>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-1">
+              <strong>Expense date:</strong> &nbsp; <span id="date_expense"></span>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-1">
+              <strong>Expense title:</strong> &nbsp; <span id="title_expense"></span>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-1">
+              <strong>Expense amount:</strong> &nbsp; <span id="amount_expense"></span>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-1">
+              <strong>Expense description:</strong> &nbsp; <span id="describe_expense"></span>
+            </div>
+          </div>
+          <div class="loading w-100 float-start text-center text-ttxt1 py-5">
+            <i class="fas fa-spinner fa-pulse" style="font-size: 40px;"></i>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary text-white" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% comment %}edit expense details{% endcomment %}
+  <div class="modal fade" id="update_exp_modal">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <form class="modal-content" id="edit_exp_form" action="{% url 'expenses_actions' %}" autocomplete="off">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Update expense details</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="exp_form w-100 float-start">
+            <div class="formsms alert w-100 float-start py-2 my-1"></div>
+            <div class="form-floating d-block w-100 float-start my-1">
+              <input type="date" class="form-control" id="edit_exp_date" name="dates" max="{% now 'Y-m-d' %}" placeholder="p" required />
+              <label for="edit_exp_date" class="form-label">Expense date</label>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-2">
+              <input type="text" class="form-control" id="edit_exp_title" name="title" placeholder="p" required />
+              <label for="edit_exp_title" class="form-label">Expense title</label>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-2">
+              <input type="number" min="1" step="0.1" class="form-control" id="edit_exp_amount" name="amount" placeholder="p" required />
+              <label for="edit_exp_amount" class="form-label">Expense amount</label>
+            </div>
+            <div class="form-floating d-block w-100 float-start my-2">
+              <textarea class="form-control" id="edit_exp_description" name="describe" placeholder="p" style="min-height:130px"></textarea>
+              <label for="edit_exp_description" class="form-label">Description (optional)</label>
+            </div>
+          </div>
+          <div class="loading w-100 float-start text-center text-charcoal py-5">
+            <i class="fas fa-spinner fa-pulse" style="font-size: 40px;"></i>
+          </div>
+        </div>
+        <input type="hidden" id="expense_id" name="expense_edit" />
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary text-white d-inline-block me-2" data-bs-dismiss="modal">Back</button>
+          <button type="submit" class="btn btn-success d-inline-block" id="expense_edit_btn">Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% comment %}delete expense{% endcomment %}
+  <div class="modal fade" id="delete_exp_modal">
+    <div class="modal-dialog">
+      <form class="modal-content" id="del_exp_form" action="{% url 'expenses_actions' %}" autocomplete="off">
+        <div class="modal-header bg-secondary text-white">
+          <h5 class="modal-title">Delete expense..</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-2 py-3 text-center">
+            <h6 class="text-charcoal">Are you sure to delete this expense..?</h6>
+          </div>
+          <input type="hidden" id="expense_del_id" name="expense_delete" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success d-inline-block me-2" data-bs-dismiss="modal">No</button>
+          <button type="submit" class="btn btn-danger d-inline-block" id="expense_delete_btn">Yes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <input type="hidden" id="expenses_list_url" value="{% url 'expenses_page' %}" />
+{% endblock %}
+{% block scripts %}
+  <script src="{% static 'datatables/datatables.min.js' %}"></script>
+  <script src="{% static 'js/miamala/expenses.js' %}"></script>
+{% endblock %}

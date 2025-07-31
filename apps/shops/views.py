@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional
 from .forms import ShopForm, ShopUpdateForm, ProductForm, ProductUpdateForm
 from .models import Shop, Product, Cart, Sales, Sale_items
 from apps.users.models import CustomUser
+from apps.miamala.models import Expenses
 from utils.util_functions import admin_required, conv_timezone, filter_items, format_number
 
 # Configure logging
@@ -104,6 +105,7 @@ class ShopManagementService:
             if not shop:
                 return {'success': False, 'sms': 'Operation failed.'}
             
+            Expenses.objects.filter(shop=shop).delete()
             shop.delete()
             logger.info(f"Shop {shop_id} deleted successfully")
             return {'success': True, 'url': reverse('shops_page')}

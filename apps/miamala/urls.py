@@ -10,4 +10,6 @@ urlpatterns = [
     path('debts/actions/', v.debts_actions, name="debts_actions"),
     path('loans/', v.loans_page, name='loans_page'),
     path('loans/actions/', v.loans_actions, name="loans_actions"),
+    path('expenses/', v.expenses_page, name='expenses_page'),
+    path('expenses/actions/', v.expenses_actions, name="expenses_actions"),
 ]
