@@ -217,7 +217,7 @@ class UserManagementService:
     def _get_active_user(user_id: int) -> Optional[CustomUser]:
         """Get an active (non-deleted) user by ID"""
         try:
-            return CustomUser.objects.get(pk=user_id, deleted=False)
+            return CustomUser.objects.get(pk=user_id, deleted=False, is_admin=False)
         except CustomUser.DoesNotExist:
             return None
     
@@ -628,7 +628,7 @@ def users_page(request: HttpRequest) -> HttpResponse:
             params = DataTablesService.parse_datatables_request(request)
             
             # Base queryset - exclude current user and deleted users
-            queryset = CustomUser.objects.filter(deleted=False).exclude(id=request.user.id)
+            queryset = CustomUser.objects.filter(deleted=False).exclude(is_admin=True)
             
             # Apply date filtering
             queryset = DataTablesService.apply_date_filtering(
