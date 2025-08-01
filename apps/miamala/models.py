@@ -10,6 +10,8 @@ class Selcompay(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(null=True, default=None)
     deleted = models.BooleanField(null=True, default=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.PROTECT, default=2, related_name='sel_user')
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, default=1, related_name='sel_shop')
 
     def __str__(self):
         return str(self.amount)
@@ -22,6 +24,8 @@ class Lipanamba(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(null=True, default=None)
     deleted = models.BooleanField(null=True, default=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.PROTECT, default=2, related_name='lipa_user')
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, default=1, related_name='lipa_shop')
 
     def __str__(self):
         return str(self.amount)
@@ -35,6 +39,8 @@ class Debts(models.Model):
     paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     description = models.TextField(null=True, default=None)
     deleted = models.BooleanField(null=True, default=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.PROTECT, default=2, related_name='debt_user')
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, default=1, related_name='debt_shop')
 
     def __str__(self):
         return str(self.name)
@@ -48,6 +54,8 @@ class Loans(models.Model):
     paid = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     description = models.TextField(null=True, default=None)
     deleted = models.BooleanField(null=True, default=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.PROTECT, default=2, related_name='loan_user')
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, default=1, related_name='loan_shop')
 
     def __str__(self):
         return str(self.name)

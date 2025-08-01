@@ -1,7 +1,7 @@
 class LoansManager {
   constructor() {
     this.config = {
-      columnIndices: [0, 1, 2, 3, 4, 5, 6],
+      columnIndices: [0, 1, 2, 3, 4, 5, 6, 7, 8],
       dateCache: { start: null, end: null },
       csrfToken: this.getCSRFToken(),
       deletingState: false,
@@ -453,6 +453,8 @@ class LoansManager {
       { data: "amount" },
       { data: "paid" },
       { data: "balance" },
+      { data: "shop" },
+      { data: "user" },
       { data: "action" },
     ];
   }
@@ -463,11 +465,11 @@ class LoansManager {
   getColumnDefs() {
     return [
       {
-        targets: [0, 6],
+        targets: [0, 8],
         orderable: false,
       },
       {
-        targets: 6,
+        targets: 8,
         createdCell: (cell, cellData, rowData, rowIndex) => {
           const btn = `
             <button class="btn btn-sm btn-dblue text-white me-1" 
@@ -526,7 +528,7 @@ class LoansManager {
         );
         cell.addClass("bg-white");
 
-        if (colIdx === 0 || colIdx === 6) {
+        if (colIdx === 0 || colIdx === 8) {
           cell.html("");
         } else if (colIdx === 1) {
           const calendar = `

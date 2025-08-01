@@ -1,7 +1,7 @@
 class DebtsManager {
   constructor() {
     this.config = {
-      columnIndices: [0, 1, 2, 3, 4, 5, 6],
+      columnIndices: [0, 1, 2, 3, 4, 5, 6, 7, 8],
       dateCache: { start: null, end: null },
       csrfToken: this.getCSRFToken(),
     };
@@ -468,6 +468,8 @@ class DebtsManager {
         { data: "amount" },
         { data: "paid" },
         { data: "balance" },
+        { data: "shop" },
+        { data: "user" },
         { data: "action" },
       ],
       order: [[1, "desc"]],
@@ -481,11 +483,11 @@ class DebtsManager {
       orderCellsTop: true,
       columnDefs: [
         {
-          targets: [0, 6],
+          targets: [0, 8],
           orderable: false,
         },
         {
-          targets: 6,
+          targets: 8,
           createdCell: (cell, cellData, rowData, rowIndex, colIndex) => {
             const btn = `<button class="btn btn-sm btn-dblue text-white me-1" onclick="fill_edit_form(${rowIndex}, ${rowData.id}, 'edit')"><i class="fas fa-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="fill_edit_form('', ${rowData.id}, 'del')"><i class="fas fa-trash"></i></button>`;
             $(cell).html(btn);
@@ -534,7 +536,7 @@ class DebtsManager {
         );
         $(cell).addClass("bg-white");
 
-        if (colIdx === 0 || colIdx === 6) {
+        if (colIdx === 0 || colIdx === 8) {
           cell.html("");
         } else if (colIdx === 1) {
           const calendar = `<button type="button" class="btn btn-primary text-white" data-bs-toggle="modal" data-bs-target="#dateFilterModal"><i class="fas fa-calendar-alt"></i></button>`;

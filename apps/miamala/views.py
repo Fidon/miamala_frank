@@ -12,7 +12,7 @@ from decimal import Decimal
 from datetime import datetime
 
 from .models import Selcompay, Lipanamba, Debts, Loans, Expenses
-from utils.util_functions import admin_required, conv_timezone, filter_items, format_number, selcom_profit, lipa_profit
+from utils.util_functions import conv_timezone, filter_items, format_number, selcom_profit, lipa_profit
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class SelcomPayService:
     """Service class for handling SelcomPay management operations"""
     
     @staticmethod
-    def create_transaction(post_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_transaction(post_data: Dict[str, Any], user) -> Dict[str, Any]:
         """Create a new SelcomPay transaction"""
         try:
             trans_names = post_data.get('names', '').strip()
@@ -38,7 +38,9 @@ class SelcomPayService:
             Selcompay.objects.create(
                 name=trans_names,
                 amount=trans_amount,
-                description=trans_describe
+                description=trans_describe,
+                user=user,
+                shop=user.shop
             )
             
             logger.info("New SelcomPay transaction created successfully")
@@ -49,7 +51,7 @@ class SelcomPayService:
             return {'success': False, 'sms': str(e)}
     
     @staticmethod
-    def update_transaction(post_data: Dict[str, Any], trans_id: int) -> Dict[str, Any]:
+    def update_transaction(post_data: Dict[str, Any], trans_id: int, user) -> Dict[str, Any]:
         """Update an existing SelcomPay transaction"""
         try:
             transaction = Selcompay.objects.get(id=trans_id)
@@ -68,6 +70,10 @@ class SelcomPayService:
                 transaction.amount = trans_amount
             if transaction.description != trans_describe:
                 transaction.description = trans_describe
+            if transaction.user != user:
+                transaction.user = user
+            if transaction.shop != user.shop:
+                transaction.shop = user.shop
                 
             transaction.save()
             
@@ -103,7 +109,7 @@ class LipaNambaService:
     """Service class for handling LipaNamba management operations"""
     
     @staticmethod
-    def create_transaction(post_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_transaction(post_data: Dict[str, Any], user) -> Dict[str, Any]:
         """Create a new LipaNamba transaction"""
         try:
             trans_names = post_data.get('names', '').strip()
@@ -118,7 +124,9 @@ class LipaNambaService:
             Lipanamba.objects.create(
                 name=trans_names,
                 amount=trans_amount,
-                description=trans_describe
+                description=trans_describe,
+                user=user,
+                shop=user.shop
             )
             
             logger.info("New LipaNamba transaction created successfully")
@@ -129,7 +137,7 @@ class LipaNambaService:
             return {'success': False, 'sms': 'Operation failed'}
     
     @staticmethod
-    def update_transaction(post_data: Dict[str, Any], trans_id: int) -> Dict[str, Any]:
+    def update_transaction(post_data: Dict[str, Any], trans_id: int, user) -> Dict[str, Any]:
         """Update an existing LipaNamba transaction"""
         try:
             transaction = Lipanamba.objects.get(id=trans_id)
@@ -148,6 +156,10 @@ class LipaNambaService:
                 transaction.amount = trans_amount
             if transaction.description != trans_describe:
                 transaction.description = trans_describe
+            if transaction.user != user:
+                transaction.user = user
+            if transaction.shop != user.shop:
+                transaction.shop = user.shop
                 
             transaction.save()
             
@@ -183,7 +195,7 @@ class DebtsService:
     """Service class for handling Debts management operations"""
     
     @staticmethod
-    def create_debt(post_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_debt(post_data: Dict[str, Any], user) -> Dict[str, Any]:
         """Create a new debt"""
         try:
             debt_names = post_data.get('names', '').strip()
@@ -198,7 +210,9 @@ class DebtsService:
             Debts.objects.create(
                 name=debt_names,
                 amount=debt_amount,
-                description=debt_describe
+                description=debt_describe,
+                user=user,
+                shop=user.shop
             )
             
             logger.info("New debt created successfully")
@@ -209,7 +223,7 @@ class DebtsService:
             return {'success': False, 'sms': 'Operation failed..!'}
     
     @staticmethod
-    def update_debt(post_data: Dict[str, Any], debt_id: int) -> Dict[str, Any]:
+    def update_debt(post_data: Dict[str, Any], debt_id: int, user) -> Dict[str, Any]:
         """Update an existing debt"""
         try:
             debt = Debts.objects.get(id=debt_id)
@@ -233,6 +247,10 @@ class DebtsService:
                 debt.name = debt_names
             if debt.description != debt_describe:
                 debt.description = debt_describe
+            if debt.user != user:
+                debt.user = user
+            if debt.shop != user.shop:
+                debt.shop = user.shop
                 
             debt.save()
             
@@ -268,7 +286,7 @@ class LoansService:
     """Service class for handling Loans management operations"""
     
     @staticmethod
-    def create_loan(post_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_loan(post_data: Dict[str, Any], user) -> Dict[str, Any]:
         """Create a new loan"""
         try:
             loan_names = post_data.get('names', '').strip()
@@ -283,7 +301,9 @@ class LoansService:
             Loans.objects.create(
                 name=loan_names,
                 amount=loan_amount,
-                description=loan_describe
+                description=loan_describe,
+                user=user,
+                shop=user.shop
             )
             
             logger.info("New loan created successfully")
@@ -294,7 +314,7 @@ class LoansService:
             return {'success': False, 'sms': str(e)}
     
     @staticmethod
-    def update_loan(post_data: Dict[str, Any], loan_id: int) -> Dict[str, Any]:
+    def update_loan(post_data: Dict[str, Any], loan_id: int, user) -> Dict[str, Any]:
         """Update an existing loan"""
         try:
             loan = Loans.objects.get(id=loan_id)
@@ -318,6 +338,10 @@ class LoansService:
                 loan.name = loan_names
             if loan.description != loan_describe:
                 loan.description = loan_describe
+            if loan.user != user:
+                loan.user = user
+            if loan.shop != user.shop:
+                loan.shop = user.shop
                 
             loan.save()
             
@@ -562,6 +586,8 @@ class SelcomPayDataService:
         2: 'names',
         3: 'amount',
         4: 'profit',
+        5: 'shop',
+        6: 'user'
     }
     
     COLUMN_FILTER_TYPES = {
@@ -579,6 +605,8 @@ class SelcomPayDataService:
                 'names': transact.name,
                 'amount': transact.amount,
                 'profit': selcom_profit(transact.amount),
+                'shop': transact.shop.abbrev,
+                'user': f'{transact.user.username} (Admin)' if transact.user.is_admin else transact.user.username,
                 'describe': transact.description if transact.description else ""
             }
             for transact in queryset
@@ -593,6 +621,8 @@ class SelcomPayDataService:
                 'id': item.get('id'),
                 'dates': conv_timezone(item.get('dates'), '%d-%b-%Y %H:%M'),
                 'names': item.get('names'),
+                'shop': item.get('shop'),
+                'user': item.get('user'),
                 'amount': format_number(item.get('amount')),
                 'profit': format_number(item.get('profit')),
                 'describe': item.get('describe'),
@@ -622,7 +652,8 @@ class LipaNambaDataService:
         2: 'names',
         3: 'amount',
         4: 'profit',
-        5: 'describe'
+        5: 'shop',
+        6: 'user',
     }
     
     COLUMN_FILTER_TYPES = {
@@ -639,6 +670,8 @@ class LipaNambaDataService:
                 'dates': transact.created_at,
                 'names': transact.name,
                 'amount': transact.amount,
+                'shop': transact.shop.abbrev,
+                'user': f'{transact.user.username} (Admin)' if transact.user.is_admin else transact.user.username,
                 'profit': lipa_profit(transact.amount),
                 'describe': transact.description if transact.description else ""
             }
@@ -654,6 +687,8 @@ class LipaNambaDataService:
                 'id': item.get('id'),
                 'dates': conv_timezone(item.get('dates'), '%d-%b-%Y %H:%M'),
                 'names': item.get('names'),
+                'shop': item.get('shop'),
+                'user': item.get('user'),
                 'amount': format_number(item.get('amount')),
                 'profit': format_number(item.get('profit')),
                 'describe': item.get('describe'),
@@ -684,7 +719,8 @@ class DebtsDataService:
         3: 'amount',
         4: 'paid',
         5: 'balance',
-        6: 'describe'
+        6: 'shop',
+        7: 'user',
     }
     
     COLUMN_FILTER_TYPES = {
@@ -704,6 +740,8 @@ class DebtsDataService:
                 'amount': debt.amount,
                 'paid': debt.paid,
                 'balance': debt.amount - debt.paid,
+                'user': f'{debt.user.username} (Admin)' if debt.user.is_admin else debt.user.username,
+                'shop': debt.shop.abbrev,
                 'describe': debt.description if debt.description else ""
             }
             for debt in queryset
@@ -722,6 +760,8 @@ class DebtsDataService:
                 'paid': format_number(item.get('paid')),
                 'balance': format_number(item.get('balance')),
                 'describe': item.get('describe'),
+                'shop': item.get('shop'),
+                'user': item.get('user'),
                 'action': ""
             }
             for i, item in enumerate(data)
@@ -751,7 +791,8 @@ class LoansDataService:
         3: 'amount',
         4: 'paid',
         5: 'balance',
-        6: 'describe'
+        6: 'shop',
+        7: 'user',
     }
     
     COLUMN_FILTER_TYPES = {
@@ -771,6 +812,8 @@ class LoansDataService:
                 'amount': loan.amount,
                 'paid': loan.paid,
                 'balance': loan.amount - loan.paid,
+                'user': f'{loan.user.username} (Admin)' if loan.user.is_admin else loan.user.username,
+                'shop': loan.shop.abbrev,
                 'describe': loan.description if loan.description else ""
             }
             for loan in queryset
@@ -789,6 +832,8 @@ class LoansDataService:
                 'paid': format_number(item.get('paid')),
                 'balance': format_number(item.get('balance')),
                 'describe': item.get('describe'),
+                'shop': item.get('shop'),
+                'user': item.get('user'),
                 'action': ""
             }
             for i, item in enumerate(data)
@@ -833,7 +878,7 @@ class ExpensesDataService:
                 'dates': expense.dates,
                 'title': expense.title,
                 'amount': expense.amount,
-                'user': expense.user.username,
+                'user': f'{expense.user.username} (Admin)' if expense.user.is_admin else expense.user.username,
                 'shop': expense.shop.abbrev
             }
             for expense in queryset
@@ -902,7 +947,6 @@ class ExpensesDataService:
 
 @never_cache
 @login_required
-@admin_required()
 def selcom_transactions_page(request: HttpRequest) -> HttpResponse:
     """Handle SelcomPay transactions page display and DataTables AJAX requests"""
     if request.method == "POST":
@@ -912,6 +956,8 @@ def selcom_transactions_page(request: HttpRequest) -> HttpResponse:
             
             # Base queryset
             queryset = Selcompay.objects.filter(deleted=False)
+            if not request.user.is_admin:
+                queryset = queryset.filter(shop=request.user.shop)
             
             # Apply date filtering
             queryset = DataTablesService.apply_date_filtering(
@@ -979,7 +1025,6 @@ def selcom_transactions_page(request: HttpRequest) -> HttpResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def selcom_transactions_actions(request: HttpRequest) -> JsonResponse:
     """Handle SelcomPay transaction actions (add, update, delete)"""
     if request.method == 'POST':
@@ -992,9 +1037,9 @@ def selcom_transactions_actions(request: HttpRequest) -> JsonResponse:
             if delete_id:
                 result = SelcomPayService.delete_transaction(delete_id)
             elif trans_id:
-                result = SelcomPayService.update_transaction(post_data, trans_id)
+                result = SelcomPayService.update_transaction(post_data, trans_id, request.user)
             else:
-                result = SelcomPayService.create_transaction(post_data)
+                result = SelcomPayService.create_transaction(post_data, request.user)
             
             return JsonResponse(result)
             
@@ -1005,7 +1050,6 @@ def selcom_transactions_actions(request: HttpRequest) -> JsonResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def lipa_transactions_page(request: HttpRequest) -> HttpResponse:
     """Handle LipaNamba transactions page display and DataTables AJAX requests"""
     if request.method == "POST":
@@ -1015,6 +1059,8 @@ def lipa_transactions_page(request: HttpRequest) -> HttpResponse:
             
             # Base queryset
             queryset = Lipanamba.objects.filter(deleted=False)
+            if not request.user.is_admin:
+                queryset = queryset.filter(shop=request.user.shop)
             
             # Apply date filtering
             queryset = DataTablesService.apply_date_filtering(
@@ -1082,7 +1128,6 @@ def lipa_transactions_page(request: HttpRequest) -> HttpResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def lipanamba_transactions_actions(request: HttpRequest) -> JsonResponse:
     """Handle LipaNamba transaction actions (add, update, delete)"""
     if request.method == 'POST':
@@ -1095,9 +1140,9 @@ def lipanamba_transactions_actions(request: HttpRequest) -> JsonResponse:
             if delete_id:
                 result = LipaNambaService.delete_transaction(delete_id)
             elif trans_id:
-                result = LipaNambaService.update_transaction(post_data, trans_id)
+                result = LipaNambaService.update_transaction(post_data, trans_id, request.user)
             else:
-                result = LipaNambaService.create_transaction(post_data)
+                result = LipaNambaService.create_transaction(post_data, request.user)
             
             return JsonResponse(result)
             
@@ -1108,7 +1153,6 @@ def lipanamba_transactions_actions(request: HttpRequest) -> JsonResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def debts_page(request: HttpRequest) -> HttpResponse:
     """Handle Debts page display and DataTables AJAX requests"""
     if request.method == "POST":
@@ -1118,6 +1162,8 @@ def debts_page(request: HttpRequest) -> HttpResponse:
             
             # Base queryset
             queryset = Debts.objects.filter(deleted=False)
+            if not request.user.is_admin:
+                queryset = queryset.filter(shop=request.user.shop)
             
             # Apply date filtering
             queryset = DataTablesService.apply_date_filtering(
@@ -1185,7 +1231,6 @@ def debts_page(request: HttpRequest) -> HttpResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def debts_actions(request: HttpRequest) -> JsonResponse:
     """Handle Debts actions (add, update, delete)"""
     if request.method == 'POST':
@@ -1198,9 +1243,9 @@ def debts_actions(request: HttpRequest) -> JsonResponse:
             if delete_id:
                 result = DebtsService.delete_debt(delete_id)
             elif debt_id:
-                result = DebtsService.update_debt(post_data, debt_id)
+                result = DebtsService.update_debt(post_data, debt_id, request.user)
             else:
-                result = DebtsService.create_debt(post_data)
+                result = DebtsService.create_debt(post_data, request.user)
             
             return JsonResponse(result)
             
@@ -1211,7 +1256,6 @@ def debts_actions(request: HttpRequest) -> JsonResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def loans_page(request: HttpRequest) -> HttpResponse:
     """Handle Loans page display and DataTables AJAX requests"""
     if request.method == "POST":
@@ -1221,6 +1265,8 @@ def loans_page(request: HttpRequest) -> HttpResponse:
             
             # Base queryset
             queryset = Loans.objects.filter(deleted=False)
+            if not request.user.is_admin:
+                queryset = queryset.filter(shop=request.user.shop)
             
             # Apply date filtering
             queryset = DataTablesService.apply_date_filtering(
@@ -1288,7 +1334,6 @@ def loans_page(request: HttpRequest) -> HttpResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def loans_actions(request: HttpRequest) -> JsonResponse:
     """Handle Loans actions (add, update, delete)"""
     if request.method == 'POST':
@@ -1301,9 +1346,9 @@ def loans_actions(request: HttpRequest) -> JsonResponse:
             if delete_id:
                 result = LoansService.delete_loan(delete_id)
             elif loan_id:
-                result = LoansService.update_loan(post_data, loan_id)
+                result = LoansService.update_loan(post_data, loan_id, request.user)
             else:
-                result = LoansService.create_loan(post_data)
+                result = LoansService.create_loan(post_data, request.user)
             
             return JsonResponse(result)
             

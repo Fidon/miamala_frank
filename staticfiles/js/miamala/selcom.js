@@ -1,7 +1,7 @@
 class SelcomManager {
   constructor() {
     this.config = {
-      columnIndices: [0, 1, 2, 3, 4, 5],
+      columnIndices: [0, 1, 2, 3, 4, 5, 6, 7],
       dateCache: { start: null, end: null },
       csrfToken: this.getCSRFToken(),
     };
@@ -394,6 +394,8 @@ class SelcomManager {
       { data: "names" },
       { data: "amount" },
       { data: "profit" },
+      { data: "shop" },
+      { data: "user" },
       { data: "action" },
     ];
   }
@@ -404,11 +406,11 @@ class SelcomManager {
   getColumnDefs() {
     return [
       {
-        targets: [0, 5],
+        targets: [0, 7],
         orderable: false,
       },
       {
-        targets: 5,
+        targets: 7,
         createdCell: (cell, cellData, rowData, rowIndex, colIndex) => {
           const btn = `
             <button class="btn btn-sm btn-dblue text-white me-1" 
@@ -467,7 +469,7 @@ class SelcomManager {
         );
         cell.addClass("bg-white");
 
-        if (colIdx === 0 || colIdx === 5) {
+        if (colIdx === 0 || colIdx === 7) {
           cell.html("");
         } else if (colIdx === 1) {
           const calendar = `
