@@ -93,6 +93,7 @@
                     <span>Users</span>
                 </a>
             </li>
+            {% endif %}
             <li class="nav-item nav-dropdown">
                 <a href="#" class="nav-dropdown-toggle" id="transactions_toggle">
                     <i class="fas fa-file-invoice-dollar"></i>
@@ -106,7 +107,6 @@
                     <li><a href="{% url 'loans_page' %}" class="nav-link loans">Mikopo</a></li>
                 </ul>
             </li>
-            {% endif %}
             <li class="nav-item">
                 <a href="{% url 'user_logout' %}" class="nav-link">
                     <i class="fas fa-sign-out-alt"></i>

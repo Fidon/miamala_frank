@@ -109,6 +109,7 @@ class UserManagementService:
             
             # Soft delete the user
             user.deleted = True
+            user.phone = None  # Clear phone to avoid conflicts
             user.save()
             
             logger.info(f"User {user_id} deleted successfully")
@@ -217,7 +218,7 @@ class UserManagementService:
     def _get_active_user(user_id: int) -> Optional[CustomUser]:
         """Get an active (non-deleted) user by ID"""
         try:
-            return CustomUser.objects.get(pk=user_id, deleted=False, is_admin=False)
+            return CustomUser.objects.get(pk=user_id, deleted=False)
         except CustomUser.DoesNotExist:
             return None
     

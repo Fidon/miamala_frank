@@ -71,9 +71,9 @@ $(function () {
     allGreetings.push(
       `Hope your ${timeGreeting.toLowerCase()} is going well`,
       `${timeGreeting}, ready to go?`,
-      `${timeGreeting} champ,`,
+      `${timeGreeting} tajiri,`,
       `Wishing you a lovely ${timeGreeting.toLowerCase()},`
-    ); // total now = 50
+    );
     const randomIndex = Math.floor(Math.random() * allGreetings.length);
     return `${allGreetings[randomIndex]} ${username}`;
   }
