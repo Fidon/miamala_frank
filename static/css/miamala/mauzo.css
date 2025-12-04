@@ -1,7 +1,7 @@
 /* ========================================
    NAVIGATION STYLES
    ======================================== */
-.sidebar-nav .nav-link.expenses {
+.sidebar-nav .nav-link.mauzo {
   background-color: var(--primary-color);
   color: white;
   border-left-color: var(--accent-color);

@@ -323,6 +323,66 @@ class ProductManagementService:
             return {'success': False, 'sms': 'Failed to update quantity.'}
 
     @staticmethod
+    def transfer_product(source_product_id: int, target_product_id: int, qty: Decimal) -> Dict[str, Any]:
+        """
+        Transfer product quantity between shops
+        
+        Args:
+            source_product_id: ID of the source product
+            target_product_id: ID of the target product
+            qty: Quantity to transfer
+            
+        Returns:
+            Dict containing success status and message
+        """
+        try:
+            source_product = ProductManagementService._get_active_product(source_product_id)
+            target_product = ProductManagementService._get_active_product(target_product_id)
+            
+            if not source_product or not target_product:
+                return {'success': False, 'sms': 'Product not found.'}
+            
+            if source_product.qty < qty:
+                return {'success': False, 'sms': 'Insufficient quantity in source shop.'}
+            
+            target_product.qty += qty
+            target_product.restock_date = timezone.now().date()
+            target_product.save()
+            
+            source_product.qty -= qty
+            source_product.restock_date = timezone.now().date()
+            source_product.save()
+            
+            logger.info(f"Transferred {qty} from product {source_product_id} to {target_product_id}")
+            return {
+                'success': True,
+                'sms': f"Transferred {qty} items from {source_product.shop.abbrev} to {target_product.shop.abbrev} successfully."
+            }
+            
+        except Exception as e:
+            logger.error(f"Error transferring product: {str(e)}")
+            return {'success': False, 'sms': 'Failed to transfer product.'}
+
+    @staticmethod
+    def get_products_by_shop(shop_id: int) -> Dict[str, Any]:
+        """
+        Get all products for a specific shop
+        
+        Args:
+            shop_id: ID of the shop
+            
+        Returns:
+            Dict containing success status and products list
+        """
+        try:
+            products = Product.objects.filter(shop_id=shop_id, is_deleted=False).values('id', 'name')
+            return {'success': True, 'products': list(products)}
+            
+        except Exception as e:
+            logger.error(f"Error getting products for shop {shop_id}: {str(e)}")
+            return {'success': False, 'sms': 'Failed to retrieve products.'}
+    
+    @staticmethod
     def get_product_details(product_id: int) -> Optional[Dict[str, Any]]:
         """
         Get detailed information about a product
@@ -1308,7 +1368,6 @@ def shop_details(request: HttpRequest, shopid: int) -> HttpResponse:
 
 @never_cache
 @login_required
-@admin_required()
 def products_page(request: HttpRequest) -> HttpResponse:
     """
     Handle products page display and DataTables AJAX requests
@@ -1323,6 +1382,8 @@ def products_page(request: HttpRequest) -> HttpResponse:
         try:
             params = DataTablesBaseService.parse_datatables_request(request)
             queryset = Product.objects.filter(is_deleted=False)
+            if not request.user.is_admin:
+                queryset = queryset.filter(shop=request.user.shop)
             
             base_data = ProductDataTablesService.prepare_product_data(queryset)
             total_records = len(base_data)
@@ -1371,7 +1432,6 @@ def products_page(request: HttpRequest) -> HttpResponse:
 @never_cache
 @login_required
 @require_POST
-@admin_required()
 def products_requests(request: HttpRequest) -> JsonResponse:
     """
     Handle various product management requests via AJAX
@@ -1389,6 +1449,8 @@ def products_requests(request: HttpRequest) -> JsonResponse:
         block_product = post_data.get('block_product')
         qty_product = post_data.get('qty_product')
         new_qty = post_data.get('qty_new')
+        trf_shop = post_data.get('transfer_shop')
+        trf_product = post_data.get('transfer_product')
         
         if qty_product and new_qty:
             result = ProductManagementService.update_product_quantity(int(qty_product), new_qty)
@@ -1398,18 +1460,23 @@ def products_requests(request: HttpRequest) -> JsonResponse:
             result = ProductManagementService.delete_product(int(delete_product))
         elif edit_product:
             result = ProductManagementService.update_product(post_data, int(edit_product))
+        elif trf_shop:
+            result = ProductManagementService.get_products_by_shop(int(trf_shop))
+        elif trf_product:
+            child_id = int(post_data.get('product'))
+            qty = Decimal(post_data.get('qty'))
+            result = ProductManagementService.transfer_product(int(trf_product), child_id, qty)
         else:
             result = ProductManagementService.create_product(post_data)
         
         return JsonResponse(result)
-        
+    
     except Exception as e:
         logger.error(f"Error in products_requests: {str(e)}")
         return JsonResponse({'success': False, 'sms': 'Unknown error, reload & try again'})
 
 @never_cache
 @login_required
-@admin_required()
 @require_GET
 def product_details(request: HttpRequest, itemid: int) -> HttpResponse:
     """

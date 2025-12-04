@@ -74,3 +74,18 @@ class Expenses(models.Model):
 
     def __str__(self):
         return str(self.title)
+
+# Mauzo model
+class Mauzo(models.Model):
+    id = models.AutoField(primary_key=True)
+    created_at = models.DateTimeField(auto_now=True)
+    dates = models.DateField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.TextField(null=True, default=None)
+    deleted = models.BooleanField(null=True, default=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.PROTECT, related_name='mauzo_user')
+    shop = models.ForeignKey(Shop, on_delete=models.PROTECT, related_name='mauzo_shop')
+
+    def __str__(self):
+        return str(self.dates)
+    

@@ -122,6 +122,13 @@
                                     <i class="fas fa-trash me-2"></i>Delete
                                 </button>
                             </div>
+                            {% if request.user.is_admin %}
+                            <div class="col-6">
+                                <button class="btn action-btn btn-transfer w-100" id="TransferBtn" data-bs-toggle="offcanvas" data-bs-target="#transfer_canvas">
+                                    <i class="fas fa-share-from-square me-2"></i>Transfer
+                                </button>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -140,6 +147,9 @@
           <div class="form-floating d-block w-100 float-start my-1">
             <select name="shop" id="item_shop" class="form-select" required>
               <option value="">Select shop</option>
+              {% if not request.user.is_admin %}
+                <option value="{{ request.user.shop.id }}" selected>{{ request.user.shop.abbrev }}</option>
+              {% else %}
               {% for shop in info.shops_list %}
                 {% if shop.id == info.shop.id %}
                 <option value="{{ shop.id }}" selected>{{ shop.abbrev }}</option>
@@ -147,6 +157,7 @@
                 <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
                 {% endif %}
               {% endfor %}
+              {% endif %}
             </select>
             <label for="item_shop" class="form-label">Select shop</label>
           </div>
@@ -227,6 +238,50 @@
         </div>
       </div>
     </div>
+
+    {% if request.user.is_admin %}
+    <div class="offcanvas offcanvas-start" id="transfer_canvas">
+      <div class="offcanvas-header bg-charcoal">
+        <h6 class="offcanvas-title text-white">Transfer product qty..</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      </div>
+      <div class="offcanvas-body bg-background">
+        <form class="d-block w-100 float-start" id="transfer_product_form" action="{% url 'product_actions' %}" autocomplete="off">
+          <div class="formsms w-100 float-start my-1 text-start"></div>
+          <div class="form-floating d-block w-100 float-start my-1 py-3">
+            Transferring: <strong>{{info.name}}</strong> from <strong>{{info.shop.abbrev}}</strong>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <select name="shop" id="trf_shopname" class="form-select" required>
+              <option value="">Select shop</option>
+              {% for shop in info.shops_list %}
+                {% if not shop.id == info.shop.id %}
+                  <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+            <label for="trf_shopname" class="form-label">Select shop</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <select name="product" id="trf_productname" class="form-select" required>
+              <option value="">Select/Search product</option>
+            </select>
+            <label for="trf_productname" class="form-label"></label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <input type="number" step="0.1" class="form-control" id="trf_productqty" name="qty" max="{{info.qty}}" min="1" placeholder="a" required />
+            <label for="trf_productqty" class="form-label">Enter quantity (Max: {{info.qty}})</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-3 text-end">
+            <button type="button" class="btn btn-danger d-inline-block me-2" id="trf_cancel_btn" data-bs-dismiss="offcanvas">Cancel</button>
+            <button type="submit" class="btn btn-success d-inline-block" id="trf_submit_btn">Transfer</button>
+            <button type="button" class="btn btn-success d-none" id="trf_reload_btn"><i class="fas fa-refresh"></i> Reload page</button>
+          </div>
+          <input type="hidden" name="transfer_product" value="{{ info.id }}" id="trf_product_id" />
+        </form>
+      </div>
+    </div>
+    {% endif %}
   {% else %}
     <div class="search-box input-group w-100 float-start">
       <input type="text" class="form-control" id="products_search" placeholder="Search.." autocomplete="off" />
@@ -245,9 +300,13 @@
           <div class="form-floating d-block w-100 float-start my-1">
             <select name="shop" id="item_shop" class="form-select" required>
               <option value="">Select shop</option>
+              {% if not request.user.is_admin %}
+                <option value="{{ request.user.shop.id }}" selected>{{ request.user.shop.abbrev }}</option>
+              {% else %}
               {% for shop in shops %}
                 <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
               {% endfor %}
+              {% endif %}
             </select>
             <label for="item_shop" class="form-label">Select shop</label>
           </div>

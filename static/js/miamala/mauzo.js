@@ -1,32 +1,32 @@
-class ExpensesManager {
+class MauzoManager {
   constructor() {
     this.config = {
-      columnIndices: [0, 1, 2, 3, 4, 5, 6],
+      columnIndices: [0, 1, 2, 3, 4, 5],
       dateCache: { start: null, end: null },
       csrfToken: this.getCSRFToken(),
       deletingState: false,
     };
 
     this.selectors = {
-      newExpForm: "#new_exp_form",
-      editExpForm: "#edit_exp_form",
-      deleteExpForm: "#del_exp_form",
-      table: "#expenses_table",
-      newExpBtn: "#new_exp_btn",
-      editExpBtn: "#exp_edit_btn",
-      deleteExpBtn: "#exp_delete_btn",
-      searchInput: "#search_exp_field",
-      clearFilter: "#expense_filter_clear",
-      minDate: "#min_exp_date",
-      maxDate: "#max_exp_date",
+      newMauzoForm: "#new_mauzo_form",
+      editMauzoForm: "#edit_mauzo_form",
+      deleteMauzoForm: "#del_mauzo_form",
+      table: "#mauzo_table",
+      newMauzoBtn: "#new_mauzo_btn",
+      editMauzoBtn: "#mauzo_edit_btn",
+      deleteMauzoBtn: "#mauzo_delete_btn",
+      searchInput: "#search_mauzo_field",
+      clearFilter: "#mauzo_filter_clear",
+      minDate: "#min_mauzo_date",
+      maxDate: "#max_mauzo_date",
       dateClear: "#date_filter_clear",
       dateFilterBtn: "#date_filter_btn",
-      expensesListUrl: "#expenses_list_url",
-      expenseId: "#expense_id",
-      expenseDelId: "#expense_del_id",
-      viewExpModal: "#view_exp_modal",
-      updateExpModal: "#update_exp_modal",
-      deleteExpModal: "#delete_exp_modal",
+      mauzoListUrl: "#mauzo_list_url",
+      mauzoId: "#mauzo_id",
+      mauzoDelId: "#mauzo_del_id",
+      viewMauzoModal: "#view_mauzo_modal",
+      updateMauzoModal: "#update_mauzo_modal",
+      deleteMauzoModal: "#delete_mauzo_modal",
       dateFilterModal: "#dateFilterModal",
     };
 
@@ -122,28 +122,28 @@ class ExpensesManager {
    * Setup all form handlers
    */
   setupFormHandlers() {
-    this.setupNewExpenseHandler();
-    this.setupEditExpenseHandler();
-    this.setupDeleteExpenseHandler();
+    this.setupNewMauzoHandler();
+    this.setupEditMauzoHandler();
+    this.setupDeleteMauzoHandler();
   }
 
   /**
-   * Setup new expense form handler
+   * Setup new mauzo form handler
    */
-  setupNewExpenseHandler() {
-    $(this.selectors.newExpForm).on("submit", (e) =>
-      this.handleNewExpenseSubmit(e)
+  setupNewMauzoHandler() {
+    $(this.selectors.newMauzoForm).on("submit", (e) =>
+      this.handleNewMauzoSubmit(e)
     );
   }
 
   /**
-   * Handle new expense form submission
+   * Handle new mauzo form submission
    */
-  handleNewExpenseSubmit(e) {
+  handleNewMauzoSubmit(e) {
     e.preventDefault();
-    const form = $(this.selectors.newExpForm);
+    const form = $(this.selectors.newMauzoForm);
     const formSms = form.find(".formsms");
-    const submitBtn = $(this.selectors.newExpBtn);
+    const submitBtn = $(this.selectors.newMauzoBtn);
 
     $.ajax({
       type: "POST",
@@ -155,19 +155,19 @@ class ExpensesManager {
       headers: { "X-CSRFToken": this.config.csrfToken },
       beforeSend: () => this.setButtonLoading(submitBtn, "spinner"),
       success: (response) =>
-        this.handleNewExpenseSuccess(response, formSms, submitBtn),
+        this.handleNewMauzoSuccess(response, formSms, submitBtn),
       error: (xhr, status, error) => {
         console.error(error);
-        this.resetButton(submitBtn, "Add");
+        this.resetButton(submitBtn, "Record");
       },
     });
   }
 
   /**
-   * Handle new expense success response
+   * Handle new mauzo success response
    */
-  handleNewExpenseSuccess(response, formSms, submitBtn) {
-    this.resetButton(submitBtn, "Add");
+  handleNewMauzoSuccess(response, formSms, submitBtn) {
+    this.resetButton(submitBtn, "Record");
 
     const alert = this.generateAlert(response.success, response.sms);
     const alertClass = response.success ? "alert-success" : "alert-danger";
@@ -181,28 +181,28 @@ class ExpensesManager {
       .slideUp("fast");
 
     if (response.success) {
-      $(this.selectors.newExpForm)[0].reset();
+      $(this.selectors.newMauzoForm)[0].reset();
       this.table.draw();
     }
   }
 
   /**
-   * Setup edit expense form handler
+   * Setup edit mauzo form handler
    */
-  setupEditExpenseHandler() {
-    $(this.selectors.editExpForm).on("submit", (e) =>
-      this.handleEditExpenseSubmit(e)
+  setupEditMauzoHandler() {
+    $(this.selectors.editMauzoForm).on("submit", (e) =>
+      this.handleEditMauzoSubmit(e)
     );
   }
 
   /**
-   * Handle edit expense form submission
+   * Handle edit mauzo form submission
    */
-  handleEditExpenseSubmit(e) {
+  handleEditMauzoSubmit(e) {
     e.preventDefault();
-    const form = $(this.selectors.editExpForm);
+    const form = $(this.selectors.editMauzoForm);
     const formSms = form.find(".formsms");
-    const submitBtn = $(this.selectors.editExpBtn);
+    const submitBtn = $(this.selectors.editMauzoBtn);
 
     $.ajax({
       type: "POST",
@@ -214,7 +214,7 @@ class ExpensesManager {
       headers: { "X-CSRFToken": this.config.csrfToken },
       beforeSend: () => this.setButtonLoading(submitBtn, "spinner"),
       success: (response) =>
-        this.handleEditExpenseSuccess(response, formSms, submitBtn),
+        this.handleEditMauzoSuccess(response, formSms, submitBtn),
       error: (xhr, status, error) => {
         console.error(error);
         this.resetButton(submitBtn, "Update");
@@ -223,9 +223,9 @@ class ExpensesManager {
   }
 
   /**
-   * Handle edit expense success response
+   * Handle edit mauzo success response
    */
-  handleEditExpenseSuccess(response, formSms, submitBtn) {
+  handleEditMauzoSuccess(response, formSms, submitBtn) {
     this.resetButton(submitBtn, "Update");
 
     const alert = this.generateAlert(response.success, response.sms);
@@ -245,22 +245,22 @@ class ExpensesManager {
   }
 
   /**
-   * Setup delete expense form handler
+   * Setup delete mauzo form handler
    */
-  setupDeleteExpenseHandler() {
-    $(this.selectors.deleteExpForm).on("submit", (e) =>
-      this.handleDeleteExpenseSubmit(e)
+  setupDeleteMauzoHandler() {
+    $(this.selectors.deleteMauzoForm).on("submit", (e) =>
+      this.handleDeleteMauzoSubmit(e)
     );
   }
 
   /**
-   * Handle delete expense form submission
+   * Handle delete mauzo form submission
    */
-  handleDeleteExpenseSubmit(e) {
+  handleDeleteMauzoSubmit(e) {
     e.preventDefault();
-    const form = $(this.selectors.deleteExpForm);
+    const form = $(this.selectors.deleteMauzoForm);
     const formSms = form.find(".formsms");
-    const submitBtn = $(this.selectors.deleteExpBtn);
+    const submitBtn = $(this.selectors.deleteMauzoBtn);
 
     $.ajax({
       type: "POST",
@@ -272,7 +272,7 @@ class ExpensesManager {
       headers: { "X-CSRFToken": this.config.csrfToken },
       beforeSend: () => this.setButtonLoading(submitBtn, "spinner"),
       success: (response) =>
-        this.handleDeleteExpenseSuccess(response, formSms, submitBtn),
+        this.handleDeleteMauzoSuccess(response, formSms, submitBtn),
       error: (xhr, status, error) => {
         console.error(error);
         this.resetButton(submitBtn, "Yes");
@@ -281,14 +281,14 @@ class ExpensesManager {
   }
 
   /**
-   * Handle delete expense success response
+   * Handle delete mauzo success response
    */
-  handleDeleteExpenseSuccess(response, formSms, submitBtn) {
+  handleDeleteMauzoSuccess(response, formSms, submitBtn) {
     this.resetButton(submitBtn, "Yes");
 
     if (response.success) {
-      $(this.selectors.expenseDelId).val("");
-      $(this.selectors.deleteExpModal).modal("hide");
+      $(this.selectors.mauzoDelId).val("");
+      $(this.selectors.deleteMauzoModal).modal("hide");
       this.table.draw();
     } else {
       const alert = this.generateAlert(response.success, response.sms);
@@ -321,22 +321,21 @@ class ExpensesManager {
   }
 
   /**
-   * Fetch expense details for view/edit
+   * Fetch mauzo details for view/edit
    */
-  fetchExpenseDetails(expenseId, action) {
+  fetchMauzoDetails(mauzoId, action) {
     const formData = new FormData();
-    formData.append("expense_view", expenseId);
+    formData.append("mauzo_view", mauzoId);
 
     $.ajax({
       type: "POST",
-      url: $(this.selectors.newExpForm).attr("action"),
+      url: $(this.selectors.newMauzoForm).attr("action"),
       data: formData,
       dataType: "json",
       contentType: false,
       processData: false,
       headers: { "X-CSRFToken": this.config.csrfToken },
-      success: (response) =>
-        this.handleFetchSuccess(response, action, expenseId),
+      success: (response) => this.handleFetchSuccess(response, action, mauzoId),
       error: (xhr, status, error) => {
         console.log(error);
         this.handleFetchError(action);
@@ -347,12 +346,12 @@ class ExpensesManager {
   /**
    * Handle fetch success response
    */
-  handleFetchSuccess(response, action, expenseId) {
+  handleFetchSuccess(response, action, mauzoId) {
     if (response.success) {
       if (action === "view") {
         this.populateViewModal(response);
       } else if (action === "edit") {
-        this.populateEditModal(response, expenseId);
+        this.populateEditModal(response, mauzoId);
       }
     } else {
       this.handleFetchError(action);
@@ -365,13 +364,13 @@ class ExpensesManager {
   handleFetchError(action) {
     const errorMessage =
       action === "view"
-        ? "Failed to load expense details."
-        : "Failed to load current expense details.";
+        ? "Failed to load sale/mauzo details."
+        : "Failed to load current sale/mauzo details.";
 
     const modalSelector =
       action === "view"
-        ? this.selectors.viewExpModal
-        : this.selectors.updateExpModal;
+        ? this.selectors.viewMauzoModal
+        : this.selectors.updateMauzoModal;
 
     $(`${modalSelector} .modal-footer`).show("fast");
     $(`${modalSelector} .loading`).html(
@@ -380,38 +379,36 @@ class ExpensesManager {
   }
 
   /**
-   * Populate view modal with expense details
+   * Populate view modal with mauzo details
    */
   populateViewModal(response) {
     $("#date_record").text(response.regdate);
-    $("#date_expense").text(response.dates);
-    $("#title_expense").text(response.title);
-    $("#amount_expense").text(response.amount);
-    $("#describe_expense").html(response.describe);
-    $("#user_expense").text(response.user);
-    $("#shop_expense").html(response.shop);
+    $("#date_mauzo").text(response.dates);
+    $("#amount_mauzo").text(response.amount);
+    $("#describe_mauzo").html(response.describe);
+    $("#user_mauzo").text(response.user);
+    $("#shop_mauzo").html(response.shop);
 
-    $(`${this.selectors.viewExpModal} .loading`).hide("fast");
-    $(`${this.selectors.viewExpModal} .details`).slideDown("fast");
-    $(`${this.selectors.viewExpModal} .modal-footer`).slideDown("fast");
+    $(`${this.selectors.viewMauzoModal} .loading`).hide("fast");
+    $(`${this.selectors.viewMauzoModal} .details`).slideDown("fast");
+    $(`${this.selectors.viewMauzoModal} .modal-footer`).slideDown("fast");
   }
 
   /**
-   * Populate edit modal with expense details
+   * Populate edit modal with mauzo details
    */
-  populateEditModal(response, expenseId) {
+  populateEditModal(response, mauzoId) {
     const describe = response.describe === "N/A" ? "" : response.describe;
 
-    $("#edit_exp_date").val(response.dates_form);
-    $("#edit_exp_shop").val(response.shop_id).change();
-    $("#edit_exp_title").val(response.title);
-    $("#edit_exp_amount").val(response.amount_form);
-    $("#edit_exp_description").val(describe);
-    $(this.selectors.expenseId).val(expenseId);
+    $("#edit_mauzo_date").val(response.dates_form);
+    $("#edit_mauzo_shop").val(response.shop_id).change();
+    $("#edit_mauzo_amount").val(response.amount_form);
+    $("#edit_mauzo_description").val(describe);
+    $(this.selectors.mauzoId).val(mauzoId);
 
-    $(`${this.selectors.updateExpModal} .loading`).hide("fast");
-    $(`${this.selectors.updateExpModal} .exp_form`).slideDown("fast");
-    $(`${this.selectors.updateExpModal} .modal-footer`).slideDown("fast");
+    $(`${this.selectors.updateMauzoModal} .loading`).hide("fast");
+    $(`${this.selectors.updateMauzoModal} .mauzo_form`).slideDown("fast");
+    $(`${this.selectors.updateMauzoModal} .modal-footer`).slideDown("fast");
   }
 
   /**
@@ -419,20 +416,20 @@ class ExpensesManager {
    */
   fillEditForm(id, action) {
     if (action === "edit") {
-      $(`${this.selectors.updateExpModal} .exp_form`).hide("fast");
-      $(`${this.selectors.updateExpModal} .modal-footer`).hide("fast");
-      $(`${this.selectors.updateExpModal} .loading`).show("fast");
-      $(this.selectors.updateExpModal).modal("show");
-      this.fetchExpenseDetails(id, "edit");
+      $(`${this.selectors.updateMauzoModal} .mauzo_form`).hide("fast");
+      $(`${this.selectors.updateMauzoModal} .modal-footer`).hide("fast");
+      $(`${this.selectors.updateMauzoModal} .loading`).show("fast");
+      $(this.selectors.updateMauzoModal).modal("show");
+      this.fetchMauzoDetails(id, "edit");
     } else if (action === "view") {
-      $(`${this.selectors.viewExpModal} .details`).hide("fast");
-      $(`${this.selectors.viewExpModal} .modal-footer`).hide("fast");
-      $(`${this.selectors.viewExpModal} .loading`).show("fast");
-      $(this.selectors.viewExpModal).modal("show");
-      this.fetchExpenseDetails(id, "view");
+      $(`${this.selectors.viewMauzoModal} .details`).hide("fast");
+      $(`${this.selectors.viewMauzoModal} .modal-footer`).hide("fast");
+      $(`${this.selectors.viewMauzoModal} .loading`).show("fast");
+      $(this.selectors.viewMauzoModal).modal("show");
+      this.fetchMauzoDetails(id, "view");
     } else if (action === "del") {
-      $(this.selectors.expenseDelId).val(parseInt(id));
-      $(this.selectors.deleteExpModal).modal("show");
+      $(this.selectors.mauzoDelId).val(parseInt(id));
+      $(this.selectors.deleteMauzoModal).modal("show");
     }
   }
 
@@ -473,7 +470,7 @@ class ExpensesManager {
    */
   getAjaxConfig() {
     return {
-      url: $(this.selectors.expensesListUrl).val(),
+      url: $(this.selectors.mauzoListUrl).val(),
       type: "POST",
       data: (d) => {
         const dateRange = this.getDateRange();
@@ -492,7 +489,6 @@ class ExpensesManager {
     return [
       { data: "count" },
       { data: "dates" },
-      { data: "title" },
       { data: "amount" },
       { data: "user" },
       { data: "shop" },
@@ -506,20 +502,20 @@ class ExpensesManager {
   getColumnDefs() {
     return [
       {
-        targets: [0, 6],
+        targets: [0, 5],
         orderable: false,
       },
       {
-        targets: 6,
+        targets: 5,
         createdCell: (cell, cellData, rowData) => {
           const buttons = `
-            <button class="btn btn-sm btn-dblue text-white me-1" onclick="expensesManager.fillEditForm(${rowData.id}, 'edit')">
+            <button class="btn btn-sm btn-dblue text-white me-1" onclick="mauzoManager.fillEditForm(${rowData.id}, 'edit')">
               <i class="fas fa-edit"></i>
             </button>
-            <button class="btn btn-sm btn-danger me-1" onclick="expensesManager.fillEditForm(${rowData.id}, 'del')">
+            <button class="btn btn-sm btn-danger me-1" onclick="mauzoManager.fillEditForm(${rowData.id}, 'del')">
               <i class="fas fa-trash"></i>
             </button>
-            <button class="btn btn-sm btn-success" onclick="expensesManager.fillEditForm(${rowData.id}, 'view')">
+            <button class="btn btn-sm btn-success" onclick="mauzoManager.fillEditForm(${rowData.id}, 'view')">
               <i class="fas fa-eye"></i>
             </button>
           `;
@@ -531,13 +527,13 @@ class ExpensesManager {
         className: "align-middle text-nowrap text-center",
       },
       {
-        targets: [2, 4, 5],
+        targets: [1, 3, 4],
         createdCell: (cell) => {
           $(cell).removeClass("text-center").addClass("text-start ps-3");
         },
       },
       {
-        targets: 3,
+        targets: 2,
         createdCell: (cell) => {
           $(cell).removeClass("text-center").addClass("text-end pe-4");
         },
@@ -568,7 +564,7 @@ class ExpensesManager {
         );
         cell.addClass("bg-white");
 
-        if (colIdx === 0 || colIdx === 6) {
+        if (colIdx === 0 || colIdx === 5) {
           cell.html("");
         } else if (colIdx === 1) {
           const calendar = `
@@ -637,7 +633,7 @@ class ExpensesManager {
 
     const tr = footer.find("tr:eq(0)");
     tr.find("th:eq(1)").text(reportDates);
-    tr.find("th:eq(3)").text(totals.total_amount);
+    tr.find("th:eq(2)").text(totals.total_amount);
   }
 
   /**
@@ -684,14 +680,14 @@ class ExpensesManager {
 }
 
 // Initialize the application when DOM is ready and expose globally for onclick handlers
-let expensesManager;
+let mauzoManager;
 $(function () {
-  expensesManager = new ExpensesManager();
+  mauzoManager = new MauzoManager();
 });
 
 // Legacy function support for existing onclick handlers
 function fill_edit_form(id, str) {
-  if (window.expensesManager) {
-    window.expensesManager.fillEditForm(id, str);
+  if (window.mauzoManager) {
+    window.mauzoManager.fillEditForm(id, str);
   }
 }

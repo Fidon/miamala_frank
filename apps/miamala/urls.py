@@ -12,4 +12,6 @@ urlpatterns = [
     path('loans/actions/', v.loans_actions, name="loans_actions"),
     path('expenses/', v.expenses_page, name='expenses_page'),
     path('expenses/actions/', v.expenses_actions, name="expenses_actions"),
+    path('mauzo/', v.mauzo_page, name='mauzo_page'),
+    path('mauzo/actions/', v.mauzo_actions, name="mauzo_actions"),
 ]

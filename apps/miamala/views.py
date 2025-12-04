@@ -11,7 +11,8 @@ from decimal import Decimal
 
 from datetime import datetime
 
-from .models import Selcompay, Lipanamba, Debts, Loans, Expenses
+from .models import Selcompay, Lipanamba, Debts, Loans, Expenses, Mauzo
+from apps.shops.models import Shop
 from utils.util_functions import conv_timezone, filter_items, format_number, selcom_profit, lipa_profit
 
 # Configure logging
@@ -381,12 +382,16 @@ class ExpensesService:
         """Create a new expense"""
         try:
             exp_date = post_data.get('dates')
+            exp_shop = post_data.get('shop')
             exp_title = post_data.get('title', '').strip()
             exp_amount = post_data.get('amount')
             exp_describe = post_data.get('describe', '').strip()
             
             if len(exp_title) < 3:
                 return {'success': False, 'sms': 'Title must have atleast 3 characters.'}
+            
+            if not Shop.objects.filter(id=exp_shop).exists():
+                return {'success': False, 'sms': 'Selected shop does not exist.'}
             
             exp_describe = None if exp_describe == "" else exp_describe
             
@@ -396,7 +401,7 @@ class ExpensesService:
                 amount=exp_amount,
                 description=exp_describe,
                 user=user,
-                shop=user.shop
+                shop=Shop.objects.get(id=exp_shop)
             )
             
             logger.info("New expense created successfully")
@@ -412,12 +417,16 @@ class ExpensesService:
         try:
             expense = Expenses.objects.get(id=expense_id)
             exp_date = post_data.get('dates')
+            exp_shop = post_data.get('shop')
             exp_title = post_data.get('title', '').strip()
             exp_amount = post_data.get('amount')
             exp_describe = post_data.get('describe', '').strip()
             
             if len(exp_title) < 3:
                 return {'success': False, 'sms': 'Title must have atleast 3 characters.'}
+            
+            if not Shop.objects.filter(id=exp_shop).exists():
+                return {'success': False, 'sms': 'Selected shop does not exist.'}
             
             exp_describe = None if exp_describe == "" else exp_describe
             
@@ -426,7 +435,7 @@ class ExpensesService:
             expense.amount = exp_amount
             expense.description = exp_describe
             expense.user = user
-            expense.shop = user.shop
+            expense.shop = Shop.objects.get(id=exp_shop)
             expense.save()
             
             logger.info(f"Expense {expense_id} updated successfully")
@@ -472,6 +481,7 @@ class ExpensesService:
                 'describe': 'N/A' if expense.description is None else expense.description,
                 'user': expense.user.username,
                 'shop': f"{expense.shop.names} ({expense.shop.abbrev})",
+                'shop_id': expense.shop.id,
             }
             
         except Expenses.DoesNotExist:
@@ -479,6 +489,114 @@ class ExpensesService:
         except Exception as e:
             logger.error(f"Error viewing expense {expense_id}: {str(e)}")
             return {'success': False, 'sms': 'Operation failed..!'}
+
+
+# MAUZO MANAGEMENT SERVICES
+class MauzoService:
+    """Service class for handling Mauzo management operations"""
+    
+    @staticmethod
+    def create_mauzo(post_data: Dict[str, Any], user) -> Dict[str, Any]:
+        """Create a new expense"""
+        try:
+            mauzo_date = post_data.get('dates')
+            mauzo_shop = post_data.get('shop')
+            mauzo_amount = post_data.get('amount')
+            mauzo_describe = post_data.get('describe', '').strip()
+            
+            if not Shop.objects.filter(id=mauzo_shop).exists():
+                return {'success': False, 'sms': 'Selected shop does not exist.'}
+            
+            mauzo_describe = None if mauzo_describe == "" else mauzo_describe
+            
+            Mauzo.objects.create(
+                dates=mauzo_date,
+                amount=mauzo_amount,
+                description=mauzo_describe,
+                user=user,
+                shop=Shop.objects.get(id=mauzo_shop)
+            )
+            
+            logger.info("New mauzo/sales created successfully")
+            return {'success': True, 'sms': 'New sales(mauzo) recorded successfully!'}
+            
+        except Exception as e:
+            logger.error(f"Error creating expense: {str(e)}")
+            return {'success': False, 'sms': 'Operation failed..!'}
+    
+    @staticmethod
+    def update_mauzo(post_data: Dict[str, Any], mauzo_id: int, user) -> Dict[str, Any]:
+        """Update an existing sales/mauzo"""
+        try:
+            mauzo_item = Mauzo.objects.get(id=mauzo_id)
+            mauzo_date = post_data.get('dates')
+            mauzo_shop = post_data.get('shop')
+            mauzo_amount = post_data.get('amount')
+            mauzo_describe = post_data.get('describe', '').strip()
+            
+            if not Shop.objects.filter(id=mauzo_shop).exists():
+                return {'success': False, 'sms': 'Selected shop does not exist.'}
+            
+            mauzo_describe = None if mauzo_describe == "" else mauzo_describe
+            
+            mauzo_item.dates = mauzo_date
+            mauzo_item.amount = mauzo_amount
+            mauzo_item.description = mauzo_describe
+            mauzo_item.user = user
+            mauzo_item.shop = Shop.objects.get(id=mauzo_shop)
+            mauzo_item.save()
+            
+            logger.info(f"Mauzo/Sale {mauzo_id} updated successfully")
+            return {'success': True, 'sms': 'Sales/Mauzo details updated successfully!'}
+            
+        except Mauzo.DoesNotExist:
+            return {'success': False, 'sms': 'Sale/Mauzo not found.'}
+        except Exception as e:
+            logger.error(f"Error updating mauzo {mauzo_id}: {str(e)}")
+            return {'success': False, 'sms': 'Operation failed..!'}
+    
+    @staticmethod
+    def delete_mauzo(mauzo_id: int) -> Dict[str, Any]:
+        """Delete sales/mauzo"""
+        try:
+            mauzo_item = Mauzo.objects.get(id=mauzo_id)
+            mauzo_item.deleted = 1
+            mauzo_item.save()
+            
+            logger.info(f"Mauzo {mauzo_id} deleted successfully")
+            return {'success': True, 'sms': 'Sales/Mauzo deleted successfully!'}
+            
+        except Mauzo.DoesNotExist:
+            return {'success': False, 'sms': 'Sales/mauzo not found.'}
+        except Exception as e:
+            logger.error(f"Error deleting mauzo {mauzo_id}: {str(e)}")
+            return {'success': False, 'sms': 'Operation failed..!'}
+    
+    @staticmethod
+    def view_mauzo(mauzo_id: int) -> Dict[str, Any]:
+        """View mauzo details"""
+        try:
+            mauzo_item = Mauzo.objects.get(id=mauzo_id)
+            
+            return {
+                'success': True,
+                'regdate': mauzo_item.created_at.strftime('%d-%b-%Y %H:%M:%S'),
+                'dates': mauzo_item.dates.strftime('%d-%b-%Y'),
+                'dates_form': mauzo_item.dates,
+                'amount': format_number(mauzo_item.amount) + ' TZS',
+                'amount_form': mauzo_item.amount,
+                'describe': 'N/A' if mauzo_item.description is None else mauzo_item.description,
+                'user': mauzo_item.user.username,
+                'shop': f"{mauzo_item.shop.names} ({mauzo_item.shop.abbrev})",
+                'shop_id': mauzo_item.shop.id,
+            }
+            
+        except Mauzo.DoesNotExist:
+            return {'success': False, 'sms': 'Sales/Mauzo not found.'}
+        except Exception as e:
+            logger.error(f"Error viewing sales/mauzo {mauzo_id}: {str(e)}")
+            return {'success': False, 'sms': 'Operation failed..!'}
+
 
 
 # DATATABLES UTILITIES
@@ -904,6 +1022,92 @@ class ExpensesDataService:
     @staticmethod
     def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
         """Calculate grand totals for Expenses data"""
+        total_amount = sum(item['amount'] for item in data)
+        return {
+            'total_amount': format_number(total_amount),
+        }
+    
+    @staticmethod
+    def apply_date_filtering_legacy(queryset: QuerySet, start_date_str: str, end_date_str: str) -> QuerySet:
+        """Apply date range filtering using legacy date format"""
+        try:
+            format_date_string = "%Y-%m-%d"
+            date_range_filters = Q()
+            
+            start_date = None
+            end_date = None
+            
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, format_date_string).date()
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, format_date_string).date()
+
+            if start_date and end_date:
+                date_range_filters |= Q(dates__range=(start_date, end_date))
+            else:
+                if start_date:
+                    date_range_filters |= Q(dates__gte=start_date)
+                elif end_date:
+                    date_range_filters |= Q(dates__lte=end_date)
+
+            if date_range_filters:
+                return queryset.filter(date_range_filters)
+                
+        except Exception as e:
+            logger.warning(f"Date filtering error: {str(e)}")
+        
+        return queryset
+
+
+# MAUZO DATA PROCESSING
+class MauzoDataService:
+    """Service class for sales/mauzo data processing"""
+    
+    COLUMN_MAPPING = {
+        0: 'id',
+        1: 'dates',
+        2: 'amount',
+        3: 'user',
+        4: 'shop'
+    }
+    
+    COLUMN_FILTER_TYPES = {
+        'amount': 'numeric',
+    }
+    
+    @staticmethod
+    def prepare_base_data(queryset: QuerySet) -> List[Dict[str, Any]]:
+        """Convert mauzo queryset to list of dicts"""
+        return [
+            {
+                'id': mauzo.id,
+                'dates': mauzo.dates,
+                'amount': mauzo.amount,
+                'user': f'{mauzo.user.username} (Admin)' if mauzo.user.is_admin else mauzo.user.username,
+                'shop': mauzo.shop.abbrev
+            }
+            for mauzo in queryset
+        ]
+    
+    @staticmethod
+    def format_final_data(data: List[Dict], row_count_start: int) -> List[Dict]:
+        """Format data for final DataTables response"""
+        return [
+            {
+                'count': row_count_start + i,
+                'id': item.get('id'),
+                'dates': item.get('dates').strftime('%d-%b-%Y'),
+                'amount': format_number(item.get('amount')),
+                'user': item.get('user'),
+                'shop': item.get('shop'),
+                'action': ""
+            }
+            for i, item in enumerate(data)
+        ]
+    
+    @staticmethod
+    def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
+        """Calculate grand totals for sales/mauzo data"""
         total_amount = sum(item['amount'] for item in data)
         return {
             'total_amount': format_number(total_amount),
@@ -1367,7 +1571,7 @@ def expenses_page(request: HttpRequest) -> HttpResponse:
             params = DataTablesService.parse_request_params(request)
             
             # Base queryset with user restrictions
-            queryset = Expenses.objects.filter(deleted=False)
+            queryset = Expenses.objects.filter(deleted=False).order_by('-created_at')
             if not request.user.is_admin:
                 queryset = queryset.filter(shop=request.user.shop)
             
@@ -1434,7 +1638,7 @@ def expenses_page(request: HttpRequest) -> HttpResponse:
                 'error': 'Failed to load data'
             })
     
-    return render(request, 'miamala/expenses.html')
+    return render(request, 'miamala/expenses.html', {'shops': Shop.objects.all().order_by('-created_at')})
 
 
 @never_cache
@@ -1462,6 +1666,116 @@ def expenses_actions(request: HttpRequest) -> JsonResponse:
             
         except Exception as e:
             logger.error(f"Error in expenses_actions: {str(e)}")
+            return JsonResponse({'success': False, 'sms': 'Operation failed..!'})
+    
+    return JsonResponse({'success': False, 'sms': 'Unknown error'})
+
+
+@never_cache
+@login_required
+def mauzo_page(request: HttpRequest) -> HttpResponse:
+    """Handle sales/mauzo page display and DataTables AJAX requests"""
+    if request.method == "POST":
+        try:
+            # Parse request parameters
+            params = DataTablesService.parse_request_params(request)
+            
+            # Base queryset with user restrictions
+            queryset = Mauzo.objects.filter(deleted=False).order_by('-created_at')
+            if not request.user.is_admin:
+                queryset = queryset.filter(shop=request.user.shop)
+            
+            # Apply date filtering (using legacy method for expenses)
+            start_date = request.POST.get('start_date')
+            end_date = request.POST.get('end_date')
+            queryset = MauzoDataService.apply_date_filtering_legacy(
+                queryset, start_date, end_date
+            )
+            
+            # Prepare base data
+            base_data = MauzoDataService.prepare_base_data(queryset)
+            total_records = len(base_data)
+            
+            # Apply sorting
+            base_data = DataTablesService.apply_sorting(
+                base_data, MauzoDataService.COLUMN_MAPPING, 
+                params['order_column_index'], params['order_dir']
+            )
+            
+            # Apply column filtering
+            base_data = DataTablesService.apply_column_filtering(
+                base_data, request, MauzoDataService.COLUMN_MAPPING, 
+                MauzoDataService.COLUMN_FILTER_TYPES
+            )
+            
+            # Apply global search
+            base_data = DataTablesService.apply_global_search(base_data, params['search_value'])
+            
+            # Calculate filtered record count and grand totals
+            records_filtered = len(base_data)
+            grand_totals = MauzoDataService.calculate_grand_totals(base_data)
+            
+            # Apply pagination
+            paginated_data = DataTablesService.paginate_data(
+                base_data, params['start'], params['length']
+            )
+            
+            # Calculate row count start
+            row_count_start = DataTablesService.calculate_row_count_start(
+                params['start'], params['length']
+            )
+            
+            # Format final data
+            final_data = MauzoDataService.format_final_data(paginated_data, row_count_start)
+            
+            # Prepare AJAX response
+            ajax_response = {
+                'draw': params['draw'],
+                'recordsTotal': total_records,
+                'recordsFiltered': records_filtered,
+                'data': final_data,
+                'grand_totals': grand_totals
+            }
+            return JsonResponse(ajax_response)
+            
+        except Exception as e:
+            logger.error(f"Error in mauzo_page DataTables: {str(e)}")
+            return JsonResponse({
+                'draw': 0,
+                'recordsTotal': 0,
+                'recordsFiltered': 0,
+                'data': [],
+                'error': 'Failed to load data'
+            })
+    
+    return render(request, 'miamala/mauzo.html', {'shops': Shop.objects.all().order_by('-created_at')})
+
+
+@never_cache
+@login_required
+def mauzo_actions(request: HttpRequest) -> JsonResponse:
+    """Handle sales/mauzo actions (add, update, delete, view)"""
+    if request.method == 'POST':
+        try:
+            post_data = request.POST
+            mauzo_edit = post_data.get('mauzo_edit')
+            mauzo_delete = post_data.get('mauzo_delete')
+            mauzo_view = post_data.get('mauzo_view')
+            
+            # Route to appropriate service method
+            if mauzo_view:
+                result = MauzoService.view_mauzo(mauzo_view)
+            elif mauzo_delete:
+                result = MauzoService.delete_mauzo(mauzo_delete)
+            elif mauzo_edit:
+                result = MauzoService.update_mauzo(post_data, mauzo_edit, request.user)
+            else:
+                result = MauzoService.create_mauzo(post_data, request.user)
+            
+            return JsonResponse(result)
+            
+        except Exception as e:
+            logger.error(f"Error in mauzo_actions: {str(e)}")
             return JsonResponse({'success': False, 'sms': 'Operation failed..!'})
     
     return JsonResponse({'success': False, 'sms': 'Unknown error'})

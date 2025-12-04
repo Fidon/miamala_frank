@@ -42,13 +42,13 @@
                     <span>Shops</span>
                 </a>
             </li>
+            {% endif %}
             <li class="nav-item">
                 <a href="{% url 'products_page' %}" class="nav-link store">
                     <i class="fas fa-warehouse"></i>
                     <span>Stock</span>
                 </a>
             </li>
-            {% endif %}
             <li class="nav-item">
                 <a href="{% url 'sales_page' %}" class="nav-link sales">
                     <i class="fas fa-receipt"></i>
@@ -74,6 +74,12 @@
                 </a>
             </li>
             {% endif %}
+            <li class="nav-item">
+                <a href="{% url 'mauzo_page' %}" class="nav-link mauzo">
+                    <i class="fas fa-money-check-dollar"></i>
+                    <span>Daily sales</span>
+                </a>
+            </li>
             <li class="nav-item">
                 <a href="{% url 'expenses_page' %}" class="nav-link expenses">
                     <i class="fas fa-list-check"></i>
@@ -129,7 +135,7 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container-fluid">
-            <p>&copy; Frank App | All rights reserved @ 2025</p>
+            <p>&copy; Frank App | All rights reserved @ 2025<br>Fidon_developer | +255 713 529 019</p>
         </div>
     </footer>
 

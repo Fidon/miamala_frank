@@ -403,6 +403,7 @@ class ExpensesManager {
     const describe = response.describe === "N/A" ? "" : response.describe;
 
     $("#edit_exp_date").val(response.dates_form);
+    $("#edit_exp_shop").val(response.shop_id).change();
     $("#edit_exp_title").val(response.title);
     $("#edit_exp_amount").val(response.amount_form);
     $("#edit_exp_description").val(describe);

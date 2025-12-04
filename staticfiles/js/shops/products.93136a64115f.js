@@ -34,13 +34,6 @@ class ProductsManager {
       itemNewQty: "#item_new_qty",
       itemUpQty: "#item_up_qty",
       itemShop: "#item_shop",
-      trfShopName: "#trf_shopname",
-      trfProductName: "#trf_productname",
-      trfCancelBtn: "#trf_cancel_btn",
-      trfSubmitBtn: "#trf_submit_btn",
-      trfReloadBtn: "#trf_reload_btn",
-      transferForm: "#transfer_product_form",
-      transferCanvas: "#transfer_canvas",
     };
 
     this.table = null;
@@ -64,7 +57,6 @@ class ProductsManager {
     this.setupFormHandler();
     this.setupTable();
     this.setupEventHandlers();
-    this.setupTransferHandlers();
   }
 
   /**
@@ -821,331 +813,118 @@ class ProductsManager {
     this.setQtyLoading(false);
     $(`${this.selectors.qtyModal} .formsms`).html(feedback);
   }
-
-  /**
-   * Setup transfer-related event handlers
-   */
-  setupTransferHandlers() {
-    $(this.selectors.trfShopName).on("change", (e) => this.handleShopChange(e));
-    $(this.selectors.transferForm).on("submit", (e) =>
-      this.handleTransferSubmit(e)
-    );
-
-    $(this.selectors.trfReloadBtn).on("click", (e) => {
-      e.preventDefault();
-      location.reload();
-    });
-
-    // Initialize searchable dropdown when canvas opens
-    $(this.selectors.transferCanvas).on("shown.bs.offcanvas", () => {
-      const productSelect = $(this.selectors.trfProductName);
-      if (productSelect.find("option").length > 1) {
-        this.initSearchableDropdown();
-      }
-    });
-  }
-
-  /**
-   * Initialize searchable dropdown for product selection
-   */
-  initSearchableDropdown() {
-    const $select = $(this.selectors.trfProductName);
-
-    // Check if already initialized
-    if ($select.parent().hasClass("searchable-dropdown-wrapper")) {
-      return;
-    }
-
-    const $wrapper = $("<div>", {
-      class: "searchable-dropdown-wrapper position-relative",
-    });
-
-    // Create search input
-    const $searchInput = $("<input>", {
-      type: "text",
-      class: "form-control searchable-dropdown-input",
-      placeholder: "Search products...",
-      autocomplete: "off",
-    });
-
-    // Create dropdown list
-    const $dropdownList = $("<ul>", {
-      class: "searchable-dropdown-list list-unstyled",
-    });
-
-    // Wrap select and hide it
-    $select.wrap($wrapper);
-    $select.hide();
-
-    // Insert search input and list
-    $select.before($searchInput);
-    $select.after($dropdownList);
-
-    // Populate dropdown list
-    const populateList = (filterText = "") => {
-      $dropdownList.empty();
-      const options = $select.find("option");
-      let hasResults = false;
-
-      options.each(function () {
-        const $option = $(this);
-        const value = $option.val();
-        const text = $option.text();
-
-        if (!value) return; // Skip empty option
-
-        if (text.toLowerCase().includes(filterText.toLowerCase())) {
-          hasResults = true;
-          const $li = $("<li>", {
-            class: "searchable-dropdown-item",
-            "data-value": value,
-            text: text,
-          });
-
-          if ($option.is(":selected")) {
-            $li.addClass("selected");
-          }
-
-          $dropdownList.append($li);
-        }
-      });
-
-      if (!hasResults) {
-        $dropdownList.append(
-          $("<li>", {
-            class: "searchable-dropdown-item disabled",
-            text: "No results found",
-          })
-        );
-      }
-    };
-
-    // Show dropdown on focus
-    $searchInput.on("focus", function () {
-      $dropdownList.show();
-      populateList($searchInput.val());
-    });
-
-    // Search functionality
-    $searchInput.on("input", function () {
-      populateList($(this).val());
-    });
-
-    // Select item
-    $dropdownList.on(
-      "click",
-      ".searchable-dropdown-item:not(.disabled)",
-      function () {
-        const value = $(this).data("value");
-        const text = $(this).text();
-
-        $select.val(value).trigger("change");
-        $searchInput.val(text);
-        $dropdownList.hide();
-
-        // Update selected state
-        $dropdownList.find(".searchable-dropdown-item").removeClass("selected");
-        $(this).addClass("selected");
-      }
-    );
-
-    // Hide dropdown when clicking outside
-    $(document).on("click", function (e) {
-      if (!$(e.target).closest(".searchable-dropdown-wrapper").length) {
-        $dropdownList.hide();
-      }
-    });
-
-    // Update search input when select changes programmatically
-    $select.on("change", function () {
-      const selectedText = $select.find("option:selected").text();
-      if ($select.val()) {
-        $searchInput.val(selectedText);
-      } else {
-        $searchInput.val("");
-      }
-    });
-
-    // Initialize with selected value
-    const initialText = $select.find("option:selected").text();
-    if ($select.val()) {
-      $searchInput.val(initialText);
-    }
-  }
-
-  /**
-   * Destroy searchable dropdown
-   */
-  destroySearchableDropdown() {
-    const $select = $(this.selectors.trfProductName);
-
-    if ($select.parent().hasClass("searchable-dropdown-wrapper")) {
-      // Remove event handlers
-      $(document).off("click");
-
-      // Unwrap and show original select
-      $select
-        .siblings(".searchable-dropdown-input, .searchable-dropdown-list")
-        .remove();
-      $select.unwrap();
-      $select.show();
-    }
-  }
-
-  /**
-   * Handle shop selection change to fetch products
-   */
-  handleShopChange(e) {
-    e.preventDefault();
-    const shopNameSelect = $(this.selectors.trfShopName);
-    const productNameSelect = $(this.selectors.trfProductName);
-
-    if (shopNameSelect.val() === "") {
-      productNameSelect.empty();
-      productNameSelect.append(`<option value="">Select product</option>`);
-      return;
-    }
-
-    const shopId = parseInt(shopNameSelect.val());
-    const formData = new FormData();
-    formData.append("transfer_shop", shopId);
-
-    $.ajax({
-      type: "POST",
-      url: $(this.selectors.transferForm).attr("action"),
-      data: formData,
-      dataType: "json",
-      contentType: false,
-      processData: false,
-      headers: {
-        "X-CSRFToken": this.config.csrfToken,
-      },
-      beforeSend: () => this.setTransferLoading(true, "Loading"),
-      success: (response) => this.handleShopChangeSuccess(response),
-      error: () => this.setTransferLoading(false, "Transfer"),
-    });
-  }
-
-  /**
-   * Handle successful product fetch after shop change
-   */
-  handleShopChangeSuccess(response) {
-    this.setTransferLoading(false, "Transfer");
-    const productNameSelect = $(this.selectors.trfProductName);
-
-    // Destroy existing searchable dropdown if it exists
-    this.destroySearchableDropdown();
-
-    productNameSelect.empty();
-
-    if (response.success && response.products) {
-      productNameSelect.append(`<option value="">Select product</option>`);
-      response.products
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach((product) => {
-          productNameSelect.append(
-            `<option value="${product.id}">${product.name}</option>`
-          );
-        });
-
-      // Initialize searchable dropdown after products are loaded
-      this.initSearchableDropdown();
-    } else {
-      productNameSelect.append(
-        `<option value="">No products available</option>`
-      );
-    }
-  }
-
-  /**
-   * Handle product transfer form submission
-   */
-  handleTransferSubmit(e) {
-    e.preventDefault();
-    const form = $(this.selectors.transferForm);
-
-    $.ajax({
-      type: "POST",
-      url: form.attr("action"),
-      data: new FormData(form[0]),
-      dataType: "json",
-      contentType: false,
-      processData: false,
-      headers: {
-        "X-CSRFToken": this.config.csrfToken,
-      },
-      beforeSend: () => this.setTransferLoading(true, "Transferring..."),
-      success: (response) => this.handleTransferSuccess(response),
-      error: () => this.handleTransferError(),
-    });
-  }
-
-  /**
-   * Handle successful product transfer
-   */
-  handleTransferSuccess(response) {
-    // Use the existing generateAlert function
-    const fdback = this.generateAlert(response.success, response.sms);
-    $(`${this.selectors.transferCanvas} .offcanvas-body`).animate(
-      { scrollTop: 0 },
-      "slow"
-    );
-    $(`${this.selectors.transferForm} .formsms`).html(fdback);
-
-    if (response.success) {
-      $(this.selectors.trfSubmitBtn)
-        .removeClass("d-inline-block")
-        .addClass("d-none");
-      $(this.selectors.trfReloadBtn)
-        .removeClass("d-none")
-        .addClass("d-inline-block");
-      $(this.selectors.transferForm)[0].reset();
-      $(this.selectors.trfProductName)
-        .empty()
-        .append(`<option value="">Select product</option>`);
-
-      $(this.selectors.transferForm)
-        .find("input, select")
-        .prop("disabled", true);
-    } else {
-      this.setTransferLoading(false, "Transfer");
-    }
-  }
-
-  /**
-   * Handle product transfer error
-   */
-  handleTransferError() {
-    this.setTransferLoading(false, "Transfer");
-    // Use the existing generateAlert function
-    const fdback = this.generateAlert(false, "Unknown error, reload & try");
-    $(`${this.selectors.transferCanvas} .offcanvas-body`).animate(
-      { scrollTop: 0 },
-      "slow"
-    );
-    $(`${this.selectors.transferForm} .formsms`).html(fdback);
-  }
-
-  /**
-   * Set transfer form loading state
-   */
-  setTransferLoading(isLoading, buttonText) {
-    const cancelBtn = $(this.selectors.trfCancelBtn);
-    const submitBtn = $(this.selectors.trfSubmitBtn);
-
-    if (isLoading) {
-      cancelBtn.removeClass("d-inline-block").addClass("d-none");
-      submitBtn
-        .html(`<i class='fas fa-spinner fa-pulse'></i> ${buttonText}`)
-        .attr("type", "button");
-    } else {
-      cancelBtn.removeClass("d-none").addClass("d-inline-block");
-      submitBtn.text(buttonText).attr("type", "submit");
-    }
-  }
 }
 
 // Initialize the application when DOM is ready
 $(function () {
   new ProductsManager();
+
+  function generate_errorsms(status, sms) {
+    return `<div class="alert alert-${
+      status ? "success" : "danger"
+    } alert-dismissible fade show px-2 m-0 d-block w-100"><i class='fas fa-${status ? "check" : "exclamation"}-circle'></i> ${sms} <button type="button" class="btn-close d-inline-block" data-bs-dismiss="alert"></button></div>`;
+  }
+
+  const CSRF_TOKEN = document
+    .querySelector('meta[name="csrf-token"]')
+    .getAttribute("content");
+
+  $("#trf_shopname").change(function (e) {
+    e.preventDefault();
+    const shopId = parseInt($(this).val());
+    const formData = new FormData();
+    formData.append("transfer_shop", shopId);
+
+    $.ajax({
+      type: "POST",
+      url: $("#transfer_product_form").attr("action"),
+      data: formData,
+      dataType: "json",
+      contentType: false,
+      processData: false,
+      headers: {
+        "X-CSRFToken": CSRF_TOKEN,
+      },
+      beforeSend: function () {
+        $("#trf_cancel_btn").removeClass("d-inline-block").addClass("d-none");
+        $("#trf_submit_btn")
+          .html("<i class='fas fa-spinner fa-pulse'></i> Loading")
+          .attr("type", "button");
+      },
+      success: function (response) {
+        $("#trf_cancel_btn").removeClass("d-none").addClass("d-inline-block");
+        $("#trf_submit_btn").text("Transfer").attr("type", "submit");
+
+        // Populate products dropdown
+        $("#trf_productname").empty();
+
+        if (response.success && response.products) {
+          $("#trf_productname").append(
+            `<option value="">Select product</option>`
+          );
+          response.products.forEach(function (product) {
+            $("#trf_productname").append(
+              `<option value="${product.id}">${product.name}</option>`
+            );
+          });
+        } else {
+          $("#trf_productname").append(
+            `<option value="">No products available</option>`
+          );
+        }
+      },
+      error: function (xhr, status, error) {
+        $("#trf_cancel_btn").removeClass("d-none").addClass("d-inline-block");
+        $("#trf_submit_btn").text("Transfer").attr("type", "submit");
+      },
+    });
+  });
+
+  $("#transfer_product_form").submit(function (e) {
+    e.preventDefault();
+    $.ajax({
+      type: "POST",
+      url: $(this).attr("action"),
+      data: new FormData($(this)[0]),
+      dataType: "json",
+      contentType: false,
+      processData: false,
+      headers: {
+        "X-CSRFToken": CSRF_TOKEN,
+      },
+      beforeSend: function () {
+        $("#trf_cancel_btn").removeClass("d-inline-block").addClass("d-none");
+        $("#trf_submit_btn")
+          .html("<i class='fas fa-spinner fa-pulse'></i> Transferring...")
+          .attr("type", "button");
+      },
+      success: function (response) {
+        var fdback = generate_errorsms(response.success, response.sms);
+
+        $("#transfer_canvas .offcanvas-body").animate({ scrollTop: 0 }, "slow");
+        $("#transfer_product_form .formsms").html(fdback);
+
+        if (response.success) {
+          $("#trf_submit_btn").removeClass("d-inline-block").addClass("d-none");
+          $("#trf_reload_btn").removeClass("d-none").addClass("d-inline-block");
+          $("#transfer_product_form")[0].reset();
+        } else {
+          $("#trf_cancel_btn").removeClass("d-none").addClass("d-inline-block");
+          $("#trf_submit_btn").text("Transfer").attr("type", "submit");
+        }
+      },
+      error: function (xhr, status, error) {
+        $("#trf_cancel_btn").removeClass("d-none").addClass("d-inline-block");
+        $("#trf_submit_btn").text("Transfer").attr("type", "submit");
+        var fdback = generate_errorsms(false, "Unknown error, reload & try");
+        $("#transfer_canvas .offcanvas-body").animate({ scrollTop: 0 }, "slow");
+        $("#transfer_product_form .formsms").html(fdback);
+      },
+    });
+  });
+
+  $("#trf_reload_btn").click(function (e) {
+    e.preventDefault();
+    location.reload();
+  });
 });
