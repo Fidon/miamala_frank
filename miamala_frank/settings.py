@@ -10,7 +10,7 @@ SECRET_KEY = 'django-insecure-!*x6*9vz3xn%yq4zptp!^4n%^vs&+2*jw15iv+@iuc_8f4_6un
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['Fidon.pythonanywhere.com', '127.0.0.1']
+ALLOWED_HOSTS = ['fidon.pythonanywhere.com', '127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [
