@@ -56,6 +56,19 @@
         <div class="modal-body">
           <div class="formsms alert w-100 float-start py-2 my-1"></div>
           <div class="form-floating d-block w-100 float-start my-1">
+            <select name="shop" id="lipa_shopname" class="form-select" required>
+              <option value="">Select shop</option>
+              {% if not request.user.is_admin %}
+                <option value="{{ request.user.shop.id }}" selected>{{ request.user.shop.abbrev }}</option>
+              {% else %}
+              {% for shop in shops %}
+                <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
+              {% endfor %}
+              {% endif %}
+            </select>
+            <label for="lipa_shopname" class="form-label">Select shop</label>
+          </div>
+          <div class="form-floating d-block w-100 float-start my-1">
             <input type="text" class="form-control" id="lipa_names" placeholder="p" required />
             <label for="lipa_names" class="form-label">Names</label>
           </div>
@@ -113,6 +126,19 @@
         </div>
         <div class="modal-body">
           <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <select name="shop" id="lipa_edit_shop" class="form-select" required>
+              <option value="">Select shop</option>
+              {% if not request.user.is_admin %}
+                <option value="{{ request.user.shop.id }}" selected>{{ request.user.shop.abbrev }}</option>
+              {% else %}
+              {% for shop in shops %}
+                <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
+              {% endfor %}
+              {% endif %}
+            </select>
+            <label for="lipa_edit_shop" class="form-label">Select shop</label>
+          </div>
           <div class="form-floating d-block w-100 float-start my-1">
             <input type="text" class="form-control" id="lipa_edit_names" placeholder="p" required />
             <label for="lipa_edit_names" class="form-label">Names</label>

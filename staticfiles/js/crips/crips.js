@@ -1,7 +1,7 @@
 class CripsManager {
   constructor() {
     this.config = {
-      columnIndices: [0, 1, 2, 3, 4, 5, 6],
+      columnIndices: [0, 1, 2, 3, 4, 5, 6, 7],
       dateCache: { start: null, end: null },
       csrfToken: this.getCSRFToken(),
       deletingState: false,
@@ -133,7 +133,7 @@ class CripsManager {
 
     if (response.update_success) {
       $(this.selectors.cripsDiv).load(
-        `${location.href} ${this.selectors.cripsDiv}`
+        `${location.href} ${this.selectors.cripsDiv}`,
       );
       this.scrollToTop("html, body");
     } else if (response.success) {
@@ -296,6 +296,7 @@ class CripsManager {
       { data: "qty" },
       { data: "price" },
       { data: "amount" },
+      { data: "user" },
       { data: "info" },
     ];
   }
@@ -306,7 +307,7 @@ class CripsManager {
   getColumnDefs() {
     return [
       {
-        targets: [0, 6],
+        targets: [0, 7],
         orderable: false,
       },
       {
@@ -314,7 +315,7 @@ class CripsManager {
         createdCell: (cell) => $(cell).addClass("text-end pe-3"),
       },
       {
-        targets: 6,
+        targets: 7,
         createdCell: (cell, cellData, rowData) => {
           const cellContent = `<a href="${rowData.info}" class="btn btn-success btn-sm">View</a>`;
           $(cell)
@@ -332,7 +333,7 @@ class CripsManager {
     const baseConfig = {
       className: "btn btn-extra text-white",
       title: "Crips - FrankApp",
-      exportOptions: { columns: [0, 1, 2, 3, 4, 5] },
+      exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6] },
     };
 
     return [
@@ -408,7 +409,8 @@ class CripsManager {
         { alignment: "center" },
         { alignment: "right", padding: [0, 10, 0, 0] },
         { alignment: "right", padding: [0, 10, 0, 0] },
-        { alignment: "right", padding: [0, 10, 0, 0], margin: [0, 0, 3, 0] },
+        { alignment: "right", padding: [0, 10, 0, 0] },
+        { alignment: "left", padding: [0, 0, 0, 10], margin: [0, 0, 3, 0] },
       ];
 
       cellConfigs.forEach((config, j) => {
@@ -441,8 +443,8 @@ class CripsManager {
         typeof i === "string"
           ? i.replace(/[\s,]/g, "").replace(/TZS/g, "") * 1
           : typeof i === "number"
-          ? i
-          : 0;
+            ? i
+            : 0;
 
       const amountTotal = api
         .column(5)
@@ -468,11 +470,11 @@ class CripsManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
-        if (colIdx === 0 || colIdx === 6) {
+        if (colIdx === 0 || colIdx === 7) {
           cell.html("");
         } else if (colIdx === 1) {
           const calendar = `
@@ -484,7 +486,7 @@ class CripsManager {
           cell.html(calendar);
         } else {
           cell.html(
-            "<input type='text' class='text-charcoal' placeholder='Filter..'/>"
+            "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
           );
           this.setupColumnFilter(cell, api, colIdx);
         }
@@ -509,7 +511,7 @@ class CripsManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 

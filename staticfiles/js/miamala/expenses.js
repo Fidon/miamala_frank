@@ -132,7 +132,7 @@ class ExpensesManager {
    */
   setupNewExpenseHandler() {
     $(this.selectors.newExpForm).on("submit", (e) =>
-      this.handleNewExpenseSubmit(e)
+      this.handleNewExpenseSubmit(e),
     );
   }
 
@@ -191,7 +191,7 @@ class ExpensesManager {
    */
   setupEditExpenseHandler() {
     $(this.selectors.editExpForm).on("submit", (e) =>
-      this.handleEditExpenseSubmit(e)
+      this.handleEditExpenseSubmit(e),
     );
   }
 
@@ -249,7 +249,7 @@ class ExpensesManager {
    */
   setupDeleteExpenseHandler() {
     $(this.selectors.deleteExpForm).on("submit", (e) =>
-      this.handleDeleteExpenseSubmit(e)
+      this.handleDeleteExpenseSubmit(e),
     );
   }
 
@@ -375,7 +375,7 @@ class ExpensesManager {
 
     $(`${modalSelector} .modal-footer`).show("fast");
     $(`${modalSelector} .loading`).html(
-      `<i class="fas fa-exclamation-circle"></i> &nbsp; ${errorMessage}`
+      `<i class="fas fa-exclamation-circle"></i> &nbsp; ${errorMessage}`,
     );
   }
 
@@ -385,6 +385,7 @@ class ExpensesManager {
   populateViewModal(response) {
     $("#date_record").text(response.regdate);
     $("#date_expense").text(response.dates);
+    $("#date_updated").text(response.updatedate);
     $("#title_expense").text(response.title);
     $("#amount_expense").text(response.amount);
     $("#describe_expense").html(response.describe);
@@ -549,8 +550,7 @@ class ExpensesManager {
    * Handle DataTable draw callback
    */
   handleDrawCallback(response) {
-    const grandTotals = response.json.grand_totals;
-    this.updateFooter({ total_amount: grandTotals.total_amount });
+    this.updateFooter({ total_amount: response.json.total_amount });
   }
 
   /**
@@ -564,7 +564,7 @@ class ExpensesManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
@@ -581,7 +581,7 @@ class ExpensesManager {
         } else {
           cell
             .html(
-              "<input type='text' class='form-control d-inline-block w-auto' placeholder='Filter'/>"
+              "<input type='text' class='form-control d-inline-block w-auto' placeholder='Filter'/>",
             )
             .addClass("text-center");
           this.setupColumnFilter(cell, api, colIdx);
@@ -607,7 +607,7 @@ class ExpensesManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
@@ -627,7 +627,7 @@ class ExpensesManager {
 
     if (dateStart && dateEnd) {
       reportDates = `${this.formatDates(dateStart)} - ${this.formatDates(
-        dateEnd
+        dateEnd,
       )}`;
     } else if (dateStart) {
       reportDates = `From ${this.formatDates(dateStart)}`;

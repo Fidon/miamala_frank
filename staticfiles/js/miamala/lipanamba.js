@@ -24,9 +24,11 @@ class LipaNambaManager {
       // Form fields
       lipaNames: "#lipa_names",
       lipaAmount: "#lipa_amount",
+      lipaShopname: "#lipa_shopname",
       lipaDescription: "#lipa_description",
       lipaEditNames: "#lipa_edit_names",
       lipaEditAmount: "#lipa_edit_amount",
+      lipaEditShop: "#lipa_edit_shop",
       lipaEditDescription: "#lipa_edit_description",
       transactionId: "#transaction_id",
       lipaDelId: "#lipa_del_id",
@@ -150,9 +152,10 @@ class LipaNambaManager {
     const formData = new FormData();
     formData.append("names", $.trim($(this.selectors.lipaNames).val()));
     formData.append("amount", $(this.selectors.lipaAmount).val());
+    formData.append("shop", $(this.selectors.lipaShopname).val());
     formData.append(
       "describe",
-      $.trim($(this.selectors.lipaDescription).val())
+      $.trim($(this.selectors.lipaDescription).val()),
     );
 
     this.submitForm({
@@ -174,12 +177,13 @@ class LipaNambaManager {
    */
   handleEditTransaction() {
     const formData = new FormData();
-    formData.append("transact_id", $(this.selectors.transactionId).val());
+    formData.append("lipa_edit", $(this.selectors.transactionId).val());
     formData.append("names", $.trim($(this.selectors.lipaEditNames).val()));
     formData.append("amount", $(this.selectors.lipaEditAmount).val());
+    formData.append("shop", $(this.selectors.lipaEditShop).val());
     formData.append(
       "describe",
-      $.trim($(this.selectors.lipaEditDescription).val())
+      $.trim($(this.selectors.lipaEditDescription).val()),
     );
 
     this.submitForm({
@@ -203,7 +207,7 @@ class LipaNambaManager {
 
     if (parseInt(lipaId) > 0) {
       const formData = new FormData();
-      formData.append("delete_id", lipaId);
+      formData.append("lipa_delete", lipaId);
 
       this.submitForm({
         form: this.selectors.deleteForm,
@@ -272,7 +276,7 @@ class LipaNambaManager {
   fillEditForm(rowIndex, id, action) {
     if (action === "edit") {
       const row = $(
-        `${this.selectors.table} tbody tr:nth-child(${rowIndex + 1})`
+        `${this.selectors.table} tbody tr:nth-child(${rowIndex + 1})`,
       );
       const amount = $("td:nth-child(4)", row).text().replace(/,/g, "");
       let describe = $("td:nth-child(1)", row).attr("data-bs-describe");
@@ -448,10 +452,9 @@ class LipaNambaManager {
    * Handle draw callback
    */
   handleDrawCallback(response) {
-    const grandTotals = response.json.grand_totals;
     const grandObj = {
-      total_amount: grandTotals.total_amount,
-      total_profit: grandTotals.total_profit,
+      total_amount: response.json.total_amount,
+      total_profit: response.json.total_profit,
     };
     this.updateFooter(grandObj);
   }
@@ -467,7 +470,7 @@ class LipaNambaManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
@@ -484,7 +487,7 @@ class LipaNambaManager {
         } else {
           cell
             .html(
-              "<input type='text' class='text-charcoal' placeholder='Filter..'/>"
+              "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
             )
             .addClass("text-center");
           this.setupColumnFilter(cell, api, colIdx);
@@ -510,7 +513,7 @@ class LipaNambaManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
@@ -573,7 +576,7 @@ class LipaNambaManager {
     if (dateStart && dateEnd) {
       reportDates = `${this.formatDates(
         dateStart,
-        "date"
+        "date",
       )} - ${this.formatDates(dateEnd, "date")}`;
     } else if (dateStart) {
       reportDates = `From ${this.formatDates(dateStart, "date")}`;

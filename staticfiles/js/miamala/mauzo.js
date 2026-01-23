@@ -132,7 +132,7 @@ class MauzoManager {
    */
   setupNewMauzoHandler() {
     $(this.selectors.newMauzoForm).on("submit", (e) =>
-      this.handleNewMauzoSubmit(e)
+      this.handleNewMauzoSubmit(e),
     );
   }
 
@@ -191,7 +191,7 @@ class MauzoManager {
    */
   setupEditMauzoHandler() {
     $(this.selectors.editMauzoForm).on("submit", (e) =>
-      this.handleEditMauzoSubmit(e)
+      this.handleEditMauzoSubmit(e),
     );
   }
 
@@ -249,7 +249,7 @@ class MauzoManager {
    */
   setupDeleteMauzoHandler() {
     $(this.selectors.deleteMauzoForm).on("submit", (e) =>
-      this.handleDeleteMauzoSubmit(e)
+      this.handleDeleteMauzoSubmit(e),
     );
   }
 
@@ -374,7 +374,7 @@ class MauzoManager {
 
     $(`${modalSelector} .modal-footer`).show("fast");
     $(`${modalSelector} .loading`).html(
-      `<i class="fas fa-exclamation-circle"></i> &nbsp; ${errorMessage}`
+      `<i class="fas fa-exclamation-circle"></i> &nbsp; ${errorMessage}`,
     );
   }
 
@@ -383,6 +383,7 @@ class MauzoManager {
    */
   populateViewModal(response) {
     $("#date_record").text(response.regdate);
+    $("#date_updated").text(response.updatedate);
     $("#date_mauzo").text(response.dates);
     $("#amount_mauzo").text(response.amount);
     $("#describe_mauzo").html(response.describe);
@@ -545,8 +546,7 @@ class MauzoManager {
    * Handle DataTable draw callback
    */
   handleDrawCallback(response) {
-    const grandTotals = response.json.grand_totals;
-    this.updateFooter({ total_amount: grandTotals.total_amount });
+    this.updateFooter({ total_amount: response.json.total_amount });
   }
 
   /**
@@ -560,7 +560,7 @@ class MauzoManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
@@ -577,7 +577,7 @@ class MauzoManager {
         } else {
           cell
             .html(
-              "<input type='text' class='form-control d-inline-block w-auto' placeholder='Filter'/>"
+              "<input type='text' class='form-control d-inline-block w-auto' placeholder='Filter'/>",
             )
             .addClass("text-center");
           this.setupColumnFilter(cell, api, colIdx);
@@ -603,7 +603,7 @@ class MauzoManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
@@ -623,7 +623,7 @@ class MauzoManager {
 
     if (dateStart && dateEnd) {
       reportDates = `${this.formatDates(dateStart)} - ${this.formatDates(
-        dateEnd
+        dateEnd,
       )}`;
     } else if (dateStart) {
       reportDates = `From ${this.formatDates(dateStart)}`;

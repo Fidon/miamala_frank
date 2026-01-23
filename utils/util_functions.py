@@ -1,7 +1,7 @@
 from functools import wraps
 from django.core.exceptions import PermissionDenied
 from django.utils import timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 
 # Decorator to check if the user is an admin
@@ -69,37 +69,37 @@ def format_number(value):
 
 # selcomPay profit calculation per transaction
 def selcom_profit(amount):
-    amount = float(amount)
+    amount = Decimal(str(amount))
     charge_ranges = {
-        (1000, 4999): 400,
-        (5000, 9999): 800,
-        (10000, 19999): 1000,
-        (20000, 39999): 1500,
-        (40000, 49999): 2000,
-        (50000, 99999): 2500,
-        (100000, 199999): 3300,
-        (200000, 299999): 4500
+        (Decimal('1000'), Decimal('4999')): Decimal('400'),
+        (Decimal('5000'), Decimal('9999')): Decimal('800'),
+        (Decimal('10000'), Decimal('19999')): Decimal('1000'),
+        (Decimal('20000'), Decimal('39999')): Decimal('1500'),
+        (Decimal('40000'), Decimal('49999')): Decimal('2000'),
+        (Decimal('50000'), Decimal('99999')): Decimal('2500'),
+        (Decimal('100000'), Decimal('199999')): Decimal('3300'),
+        (Decimal('200000'), Decimal('299999')): Decimal('4500'),
     }
-    for charge_range, charge_value in charge_ranges.items():
-        lower_limit, upper_limit = charge_range
-        if lower_limit <= amount <= upper_limit:
-            return abs((amount * 0.013) - charge_value)
-    return 0.0
+    percentage_fee = Decimal('0.013')
+    for (lower, upper), charge in charge_ranges.items():
+        if lower <= amount <= upper:
+            profit = abs((amount * percentage_fee) - charge)
+            return profit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return Decimal('0.00')
 
 # Lipanamba profit calculation per transaction
 def lipa_profit(amount):
-    amount = float(amount)
+    amount = Decimal(str(amount))
     charge_ranges = {
-        (1000, 4999): 300,
-        (5000, 19999): 500,
-        (20000, 49999): 800,
-        (50000, 99999): 1000,
-        (100000, 199999): 1500,
-        (200000, 299999): 2000,
-        (300000, 1000000): 2500
+        (Decimal('1000'), Decimal('4999')): Decimal('300.00'),
+        (Decimal('5000'), Decimal('19999')): Decimal('500.00'),
+        (Decimal('20000'), Decimal('49999')): Decimal('800.00'),
+        (Decimal('50000'), Decimal('99999')): Decimal('1000.00'),
+        (Decimal('100000'), Decimal('199999')): Decimal('1500.00'),
+        (Decimal('200000'), Decimal('299999')): Decimal('2000.00'),
+        (Decimal('300000'), Decimal('1000000')): Decimal('2500.00'),
     }
-    for charge_range, charge_value in charge_ranges.items():
-        lower_limit, upper_limit = charge_range
-        if lower_limit <= amount <= upper_limit:
-            return charge_value
-    return 0.0
+    for (lower, upper), charge in charge_ranges.items():
+        if lower <= amount <= upper:
+            return charge
+    return Decimal('0.00')

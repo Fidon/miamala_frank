@@ -25,9 +25,11 @@ class LoansManager {
       dateFilterModal: "#dateFilterModal",
       // Form fields
       loanNames: "#loan_names",
+      loanShopname: "#loan_shopname",
       loanAmount: "#loan_amount",
       loanDescription: "#loan_description",
       loanEditNames: "#loan_edit_names",
+      loanEditShopname: "#loan_edit_shop",
       loanEditAmount: "#loan_edit_amount",
       loanEditPaid: "#loan_edit_paid",
       loanEditDescription: "#loan_edit_description",
@@ -164,10 +166,11 @@ class LoansManager {
 
       const formData = new FormData();
       formData.append("names", $.trim($(this.selectors.loanNames).val()));
+      formData.append("shop", $(this.selectors.loanShopname).val());
       formData.append("amount", $(this.selectors.loanAmount).val());
       formData.append(
         "describe",
-        $.trim($(this.selectors.loanDescription).val())
+        $.trim($(this.selectors.loanDescription).val()),
       );
 
       $.ajax({
@@ -197,7 +200,7 @@ class LoansManager {
     this.showFormMessage(
       this.selectors.newLoanForm,
       response.success,
-      response.sms
+      response.sms,
     );
 
     if (response.success) {
@@ -220,18 +223,19 @@ class LoansManager {
         this.showFormMessage(
           this.selectors.editLoanForm,
           false,
-          "Paid amount cannot exceed current loan!"
+          "Paid amount cannot exceed current loan!",
         );
         return;
       }
 
       const formData = new FormData();
-      formData.append("loan_id", $(this.selectors.loanId).val());
+      formData.append("loan_edit", $(this.selectors.loanId).val());
       formData.append("names", $.trim($(this.selectors.loanEditNames).val()));
+      formData.append("shop", $(this.selectors.loanEditShopname).val());
       formData.append("paid", loanPaid);
       formData.append(
         "describe",
-        $.trim($(this.selectors.loanEditDescription).val())
+        $.trim($(this.selectors.loanEditDescription).val()),
       );
 
       $.ajax({
@@ -262,7 +266,7 @@ class LoansManager {
     this.showFormMessage(
       this.selectors.editLoanForm,
       response.success,
-      response.sms
+      response.sms,
     );
 
     if (response.success) {
@@ -283,7 +287,7 @@ class LoansManager {
       if (parseInt(delLoanId) <= 0) return;
 
       const formData = new FormData();
-      formData.append("delete_id", delLoanId);
+      formData.append("loan_delete", delLoanId);
 
       $.ajax({
         type: "POST",
@@ -312,7 +316,7 @@ class LoansManager {
     this.showFormMessage(
       this.selectors.deleteLoanForm,
       response.success,
-      response.sms
+      response.sms,
     );
 
     if (response.success) {
@@ -327,7 +331,7 @@ class LoansManager {
   fillEditForm(rowIndex, id, action) {
     if (action === "edit") {
       const row = $(
-        `${this.selectors.loansTable} tbody tr:nth-child(${rowIndex + 1})`
+        `${this.selectors.loansTable} tbody tr:nth-child(${rowIndex + 1})`,
       );
       const names = $("td:nth-child(3)", row).text();
       const loan = $("td:nth-child(6)", row).text().replace(/,/g, "");
@@ -505,11 +509,11 @@ class LoansManager {
    * Handle table draw callback
    */
   handleDrawCallback(response) {
-    const grandTotals = response.json.grand_totals;
+    // const grandTotals = response.json.grand_totals;
     this.updateFooter({
-      total_amount: grandTotals.total_amount,
-      total_paid: grandTotals.total_paid,
-      total_balance: grandTotals.total_balance,
+      total_amount: response.json.total_amount,
+      total_paid: response.json.total_paid,
+      total_balance: response.json.total_balance,
     });
   }
 
@@ -524,7 +528,7 @@ class LoansManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
@@ -541,7 +545,7 @@ class LoansManager {
         } else {
           cell
             .html(
-              "<input type='text' class='text-charcoal' placeholder='Filter..'/>"
+              "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
             )
             .addClass("text-center");
           this.setupColumnFilter(cell, api, colIdx);
@@ -567,7 +571,7 @@ class LoansManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
@@ -630,7 +634,7 @@ class LoansManager {
     if (dateStart && dateEnd) {
       reportDates = `${this.formatDates(
         dateStart,
-        "date"
+        "date",
       )} - ${this.formatDates(dateEnd, "date")}`;
     } else if (dateStart) {
       reportDates = `From ${this.formatDates(dateStart, "date")}`;

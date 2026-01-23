@@ -15,12 +15,14 @@ class SelcomManager {
       // New transaction form elements
       newNames: "#sel_names",
       newAmount: "#sel_amount",
+      newShopName: "#sel_shopname",
       newDescription: "#sel_description",
       newSubmitBtn: "#sel_trans_btn",
 
       // Edit transaction form elements
       editNames: "#sel_edit_names",
       editAmount: "#sel_edit_amount",
+      editShopName: "#sel_edit_shopname",
       editDescription: "#sel_edit_description",
       editSubmitBtn: "#sel_edit_trans_btn",
       transactionId: "#transaction_id",
@@ -81,7 +83,7 @@ class SelcomManager {
    */
   setupNewTransactionForm() {
     $(this.selectors.newForm).on("submit", (e) =>
-      this.handleNewTransactionSubmit(e)
+      this.handleNewTransactionSubmit(e),
     );
   }
 
@@ -94,6 +96,7 @@ class SelcomManager {
     const formData = new FormData();
     formData.append("names", $.trim($(this.selectors.newNames).val()));
     formData.append("amount", $(this.selectors.newAmount).val());
+    formData.append("shop", $(this.selectors.newShopName).val());
     formData.append("describe", $.trim($(this.selectors.newDescription).val()));
 
     this.submitForm({
@@ -115,7 +118,7 @@ class SelcomManager {
    */
   setupEditTransactionForm() {
     $(this.selectors.editForm).on("submit", (e) =>
-      this.handleEditTransactionSubmit(e)
+      this.handleEditTransactionSubmit(e),
     );
   }
 
@@ -126,12 +129,13 @@ class SelcomManager {
     e.preventDefault();
 
     const formData = new FormData();
-    formData.append("transact_id", $(this.selectors.transactionId).val());
+    formData.append("selcom_edit", $(this.selectors.transactionId).val());
+    formData.append("shop", $.trim($(this.selectors.editShopName).val()));
     formData.append("names", $.trim($(this.selectors.editNames).val()));
     formData.append("amount", $(this.selectors.editAmount).val());
     formData.append(
       "describe",
-      $.trim($(this.selectors.editDescription).val())
+      $.trim($(this.selectors.editDescription).val()),
     );
 
     this.submitForm({
@@ -152,7 +156,7 @@ class SelcomManager {
    */
   setupDeleteTransactionForm() {
     $(this.selectors.deleteForm).on("submit", (e) =>
-      this.handleDeleteTransactionSubmit(e)
+      this.handleDeleteTransactionSubmit(e),
     );
   }
 
@@ -165,7 +169,7 @@ class SelcomManager {
     const selcomId = $(this.selectors.deleteId).val();
     if (parseInt(selcomId) > 0) {
       const formData = new FormData();
-      formData.append("delete_id", selcomId);
+      formData.append("selcom_delete", selcomId);
 
       this.submitForm({
         form: $(this.selectors.deleteForm),
@@ -245,7 +249,7 @@ class SelcomManager {
   fillEditForm(rowIndex, id, action) {
     if (action === "edit") {
       const row = $(
-        `${this.selectors.table} tbody tr:nth-child(${rowIndex + 1})`
+        `${this.selectors.table} tbody tr:nth-child(${rowIndex + 1})`,
       );
       const amount = $("td:nth-child(4)", row).text().replace(/,/g, "");
       let describe = $("td:nth-child(1)", row).attr("data-bs-describe");
@@ -446,10 +450,9 @@ class SelcomManager {
    * Handle draw callback
    */
   handleDrawCallback(response) {
-    const grandTotals = response.json.grand_totals;
     const grandObj = {
-      total_amount: grandTotals.total_amount,
-      total_profit: grandTotals.total_profit,
+      total_amount: response.json.total_amount,
+      total_profit: response.json.total_profit,
     };
     this.updateFooter(grandObj);
   }
@@ -465,7 +468,7 @@ class SelcomManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
@@ -481,7 +484,7 @@ class SelcomManager {
           cell.html(calendar).addClass("text-center");
         } else {
           cell.html(
-            "<input type='text' class='text-charcoal' placeholder='Filter..'/>"
+            "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
           );
           cell.addClass("text-center");
           this.setupColumnFilter(cell, api, colIdx);
@@ -507,7 +510,7 @@ class SelcomManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
@@ -575,7 +578,7 @@ class SelcomManager {
     if (dateStart && dateEnd) {
       reportDates = `${this.formatDates(
         dateStart,
-        "date"
+        "date",
       )} - ${this.formatDates(dateEnd, "date")}`;
     } else if (dateStart) {
       reportDates = `From ${this.formatDates(dateStart, "date")}`;

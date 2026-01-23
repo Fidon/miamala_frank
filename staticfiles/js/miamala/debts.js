@@ -26,9 +26,11 @@ class DebtsManager {
       // Form fields
       debtNames: "#debt_names",
       debtAmount: "#debt_amount",
+      debtShopname: "#debt_shopname",
       debtDescription: "#debt_description",
       debtEditNames: "#debt_edit_names",
       debtEditAmount: "#debt_edit_amount",
+      debtEditShopname: "#debt_edit_shop",
       debtEditPaid: "#debt_edit_paid",
       debtEditDescription: "#debt_edit_description",
       debtId: "#debt_id",
@@ -112,7 +114,7 @@ class DebtsManager {
   fillEditForm(rowIndex, id, action) {
     if (action === "edit") {
       const row = $(
-        `${this.selectors.debtsTable} tbody tr:nth-child(${rowIndex + 1})`
+        `${this.selectors.debtsTable} tbody tr:nth-child(${rowIndex + 1})`,
       );
       const names = $("td:nth-child(3)", row).text();
       const debt = $("td:nth-child(6)", row).text().replace(/,/g, "");
@@ -177,9 +179,10 @@ class DebtsManager {
     const formData = new FormData();
     formData.append("names", $.trim($(this.selectors.debtNames).val()));
     formData.append("amount", $(this.selectors.debtAmount).val());
+    formData.append("shop", $(this.selectors.debtShopname).val());
     formData.append(
       "describe",
-      $.trim($(this.selectors.debtDescription).val())
+      $.trim($(this.selectors.debtDescription).val()),
     );
 
     $.ajax({
@@ -228,17 +231,15 @@ class DebtsManager {
       const formSms = $(`${this.selectors.editDebtForm} .formsms`);
       const submitBtn = $(this.selectors.debtEditBtn);
 
-      const debtNames = $.trim($(this.selectors.debtEditNames).val());
       const debtAmount = parseFloat($(this.selectors.debtEditAmount).val());
       const debtPaid = parseFloat($(this.selectors.debtEditPaid).val());
-      const debtDescribe = $.trim($(this.selectors.debtEditDescription).val());
 
       if (this.checkDebt(debtAmount, debtPaid)) {
         this.handleEditDebtSubmit(submitBtn, formSms, debtAmount, debtPaid);
       } else {
         const alert = this.generateAlert(
           false,
-          "Paid amount cannot exceed current debt!"
+          "Paid amount cannot exceed current debt!",
         );
         formSms
           .removeClass("alert-success")
@@ -257,12 +258,13 @@ class DebtsManager {
   handleEditDebtSubmit(submitBtn, formSms, debtAmount, debtPaid) {
     const form = $(this.selectors.editDebtForm);
     const formData = new FormData();
-    formData.append("debt_id", $(this.selectors.debtId).val());
+    formData.append("debt_edit", $(this.selectors.debtId).val());
     formData.append("names", $.trim($(this.selectors.debtEditNames).val()));
+    formData.append("shop", $.trim($(this.selectors.debtEditShopname).val()));
     formData.append("paid", debtPaid);
     formData.append(
       "describe",
-      $.trim($(this.selectors.debtEditDescription).val())
+      $.trim($(this.selectors.debtEditDescription).val()),
     );
 
     $.ajax({
@@ -325,7 +327,7 @@ class DebtsManager {
   handleDeleteDebtSubmit(submitBtn, formSms, delDebtId) {
     const form = $(this.selectors.deleteDebtForm);
     const formData = new FormData();
-    formData.append("delete_id", delDebtId);
+    formData.append("debt_delete", delDebtId);
 
     $.ajax({
       type: "POST",
@@ -509,11 +511,10 @@ class DebtsManager {
       ],
       dom: "lBfrtip",
       drawCallback: (response) => {
-        const grandTotals = response.json.grand_totals;
         const grandObj = {
-          total_amount: grandTotals.total_amount,
-          total_paid: grandTotals.total_paid,
-          total_balance: grandTotals.total_balance,
+          total_amount: response.json.total_amount,
+          total_paid: response.json.total_paid,
+          total_balance: response.json.total_balance,
         };
         this.updateFooter(grandObj);
       },
@@ -532,7 +533,7 @@ class DebtsManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         $(cell).addClass("bg-white");
 
@@ -544,7 +545,7 @@ class DebtsManager {
           cell.addClass("text-center");
         } else {
           $(cell).html(
-            "<input type='text' class='text-charcoal' placeholder='Filter..'/>"
+            "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
           );
           $(cell).addClass("text-center");
           this.setupColumnFilter(cell, api, colIdx);
@@ -569,7 +570,7 @@ class DebtsManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
@@ -589,7 +590,7 @@ class DebtsManager {
     if (dateStart && dateEnd) {
       reportDates = `${this.formatDates(
         dateStart,
-        "date"
+        "date",
       )} - ${this.formatDates(dateEnd, "date")}`;
     } else if (dateStart) {
       reportDates = `From ${this.formatDates(dateStart, "date")}`;

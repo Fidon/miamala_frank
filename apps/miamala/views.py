@@ -1,1781 +1,605 @@
 import logging
-import zoneinfo
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 from django.contrib.auth.decorators import login_required
 from dateutil.parser import parse
 from django.http import JsonResponse, HttpRequest, HttpResponse
-from django.db.models import QuerySet, Q
+from django.db.models import QuerySet, Q, Sum, F
+from django.db.models.functions import Lower
 from decimal import Decimal
-
-from datetime import datetime
 
 from .models import Selcompay, Lipanamba, Debts, Loans, Expenses, Mauzo
 from apps.shops.models import Shop
-from utils.util_functions import conv_timezone, filter_items, format_number, selcom_profit, lipa_profit
+from utils.util_functions import conv_timezone, format_number, selcom_profit, lipa_profit
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# --- DATABASE UTILITIES ---
 
-# SELCOMPAY MANAGEMENT SERVICES
-class SelcomPayService:
-    """Service class for handling SelcomPay management operations"""
-    
+def get_numeric_filter(field_name: str, search_value: str) -> Optional[Q]:
+    """
+    Translates filter_items() logic to Database Q objects for performance.
+    Logic: '-100' (<=100), '100-' (>=100), '100' (==100)
+    """
+    try:
+        search_value = search_value.replace(',', '').strip()
+        if search_value.startswith('-') and search_value[1:].replace('.', '', 1).isdigit():
+            return Q(**{f"{field_name}__lte": float(search_value[1:])})
+        elif search_value.endswith('-') and search_value[:-1].replace('.', '', 1).isdigit():
+            return Q(**{f"{field_name}__gte": float(search_value[:-1])})
+        elif search_value.replace('.', '', 1).isdigit():
+            return Q(**{field_name: float(search_value)})
+    except (ValueError, TypeError):
+        pass
+    return None
+
+class BaseService:
+    """Base class for common CRUD operations with performance optimizations"""
+    @staticmethod
+    def _get_shop(shop_id, user):
+        if not shop_id: return user.shop
+        return Shop.objects.get(id=shop_id)
+
+# --- TRANSACTION SERVICES ---
+
+class SelcomPayService(BaseService):
     @staticmethod
     def create_transaction(post_data: Dict[str, Any], user) -> Dict[str, Any]:
-        """Create a new SelcomPay transaction"""
         try:
-            trans_names = post_data.get('names', '').strip()
-            trans_amount = post_data.get('amount')
-            trans_describe = post_data.get('describe', '').strip()
-            
-            if len(trans_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            trans_describe = None if trans_describe == "" else trans_describe
+            name = post_data.get('names', '').strip()
+            amount = post_data.get('amount')
+            if len(name) < 3: return {'success': False, 'sms': 'Names must have at least 3 characters.'}
             
             Selcompay.objects.create(
-                name=trans_names,
-                amount=trans_amount,
-                description=trans_describe,
-                user=user,
-                shop=user.shop
+                name=name, amount=amount, profit=selcom_profit(amount),
+                description=post_data.get('describe', '').strip() or None,
+                user=user, shop=Shop.objects.get(id=post_data.get('shop'))
             )
-            
-            logger.info("New SelcomPay transaction created successfully")
             return {'success': True, 'sms': 'Transaction added successfully!'}
-            
         except Exception as e:
-            logger.error(f"Error creating SelcomPay transaction: {str(e)}")
+            logger.error(f"SelcomPay Create Error: {e}")
             return {'success': False, 'sms': str(e)}
-    
+
     @staticmethod
     def update_transaction(post_data: Dict[str, Any], trans_id: int, user) -> Dict[str, Any]:
-        """Update an existing SelcomPay transaction"""
         try:
-            transaction = Selcompay.objects.get(id=trans_id)
-            trans_names = post_data.get('names', '').strip()
-            trans_amount = post_data.get('amount')
-            trans_describe = post_data.get('describe', '').strip()
-            
-            if len(trans_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            trans_describe = None if trans_describe == "" else trans_describe
-            
-            if transaction.name != trans_names:
-                transaction.name = trans_names
-            if transaction.amount != trans_amount:
-                transaction.amount = trans_amount
-            if transaction.description != trans_describe:
-                transaction.description = trans_describe
-            if transaction.user != user:
-                transaction.user = user
-            if transaction.shop != user.shop:
-                transaction.shop = user.shop
-                
-            transaction.save()
-            
-            logger.info(f"SelcomPay transaction {trans_id} updated successfully")
-            return {'success': True, 'sms': 'Transaction updated successfully!'}
-            
-        except Selcompay.DoesNotExist:
-            return {'success': False, 'sms': 'Transaction not found.'}
+            item = Selcompay.objects.get(id=trans_id)
+            item.name = post_data.get('names', '').strip()
+            item.amount = post_data.get('amount')
+            item.profit = selcom_profit(post_data.get('amount'))
+            item.description = post_data.get('describe', '').strip() or None
+            item.shop = Shop.objects.get(id=post_data.get('shop'))
+            item.save()
+            return {'success': True, 'sms': 'Updated successfully!'}
         except Exception as e:
-            logger.error(f"Error updating SelcomPay transaction {trans_id}: {str(e)}")
             return {'success': False, 'sms': str(e)}
-    
+
     @staticmethod
     def delete_transaction(trans_id: int) -> Dict[str, Any]:
-        """Delete a SelcomPay transaction"""
-        try:
-            transaction = Selcompay.objects.get(id=trans_id)
-            transaction.deleted = 1
-            transaction.save()
-            
-            logger.info(f"SelcomPay transaction {trans_id} deleted successfully")
-            return {'success': True, 'sms': 'Transaction deleted successfully!'}
-            
-        except Selcompay.DoesNotExist:
-            return {'success': False, 'sms': 'Transaction not found.'}
-        except Exception as e:
-            logger.error(f"Error deleting SelcomPay transaction {trans_id}: {str(e)}")
-            return {'success': False, 'sms': str(e)}
+        Selcompay.objects.filter(id=trans_id).update(deleted=True)
+        return {'success': True, 'sms': 'Transaction deleted successfully!'}
 
-
-# LIPANAMBA MANAGEMENT SERVICES
-class LipaNambaService:
-    """Service class for handling LipaNamba management operations"""
-    
+class LipaNambaService(BaseService):
     @staticmethod
     def create_transaction(post_data: Dict[str, Any], user) -> Dict[str, Any]:
-        """Create a new LipaNamba transaction"""
         try:
-            trans_names = post_data.get('names', '').strip()
-            trans_amount = post_data.get('amount')
-            trans_describe = post_data.get('describe', '').strip()
-            
-            if len(trans_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            trans_describe = None if trans_describe == "" else trans_describe
-            
             Lipanamba.objects.create(
-                name=trans_names,
-                amount=trans_amount,
-                description=trans_describe,
-                user=user,
-                shop=user.shop
+                name=post_data.get('names', '').strip(),
+                amount=post_data.get('amount'), profit=lipa_profit(post_data.get('amount')),
+                description=post_data.get('describe', '').strip() or None,
+                user=user, shop=Shop.objects.get(id=post_data.get('shop'))
             )
-            
-            logger.info("New LipaNamba transaction created successfully")
             return {'success': True, 'sms': 'Transaction added successfully!'}
-            
-        except Exception as e:
-            logger.error(f"Error creating LipaNamba transaction: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed'}
-    
+        except Exception: return {'success': False, 'sms': 'Operation failed'}
+
     @staticmethod
     def update_transaction(post_data: Dict[str, Any], trans_id: int, user) -> Dict[str, Any]:
-        """Update an existing LipaNamba transaction"""
         try:
-            transaction = Lipanamba.objects.get(id=trans_id)
-            trans_names = post_data.get('names', '').strip()
-            trans_amount = post_data.get('amount')
-            trans_describe = post_data.get('describe', '').strip()
-            
-            if len(trans_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            trans_describe = None if trans_describe == "" else trans_describe
-            
-            if transaction.name != trans_names:
-                transaction.name = trans_names
-            if transaction.amount != trans_amount:
-                transaction.amount = trans_amount
-            if transaction.description != trans_describe:
-                transaction.description = trans_describe
-            if transaction.user != user:
-                transaction.user = user
-            if transaction.shop != user.shop:
-                transaction.shop = user.shop
-                
-            transaction.save()
-            
-            logger.info(f"LipaNamba transaction {trans_id} updated successfully")
+            obj = Lipanamba.objects.get(id=trans_id)
+            obj.name = post_data.get('names', '').strip()
+            obj.amount = post_data.get('amount')
+            obj.profit = lipa_profit(post_data.get('amount'))
+            obj.description = post_data.get('describe', '').strip() or None
+            obj.shop = Shop.objects.get(id=post_data.get('shop'))
+            obj.save()
             return {'success': True, 'sms': 'Transaction updated successfully!'}
-            
-        except Lipanamba.DoesNotExist:
-            return {'success': False, 'sms': 'Transaction not found.'}
-        except Exception as e:
-            logger.error(f"Error updating LipaNamba transaction {trans_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed'}
-    
+        except Exception: return {'success': False, 'sms': 'Operation failed'}
+
     @staticmethod
     def delete_transaction(trans_id: int) -> Dict[str, Any]:
-        """Delete a LipaNamba transaction"""
-        try:
-            transaction = Lipanamba.objects.get(id=trans_id)
-            transaction.deleted = 1
-            transaction.save()
-            
-            logger.info(f"LipaNamba transaction {trans_id} deleted successfully")
-            return {'success': True, 'sms': 'Transaction deleted successfully!'}
-            
-        except Lipanamba.DoesNotExist:
-            return {'success': False, 'sms': 'Transaction not found.'}
-        except Exception as e:
-            logger.error(f"Error deleting LipaNamba transaction {trans_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed'}
+        Lipanamba.objects.filter(id=trans_id).update(deleted=True)
+        return {'success': True, 'sms': 'Transaction deleted successfully!'}
 
-
-# DEBTS MANAGEMENT SERVICES
-class DebtsService:
-    """Service class for handling Debts management operations"""
-    
+class DebtsService(BaseService):
     @staticmethod
     def create_debt(post_data: Dict[str, Any], user) -> Dict[str, Any]:
-        """Create a new debt"""
         try:
-            debt_names = post_data.get('names', '').strip()
-            debt_amount = post_data.get('amount')
-            debt_describe = post_data.get('describe', '').strip()
-            
-            if len(debt_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            debt_describe = None if debt_describe == "" else debt_describe
-            
             Debts.objects.create(
-                name=debt_names,
-                amount=debt_amount,
-                description=debt_describe,
-                user=user,
-                shop=user.shop
+                name=post_data.get('names', '').strip(),
+                amount=post_data.get('amount'),
+                description=post_data.get('describe', '').strip() or None,
+                user=user, shop=Shop.objects.get(id=post_data.get('shop'))
             )
-            
-            logger.info("New debt created successfully")
             return {'success': True, 'sms': 'New debt added successfully!'}
-            
-        except Exception as e:
-            logger.error(f"Error creating debt: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+        except Exception: return {'success': False, 'sms': 'Operation failed..!'}
+
     @staticmethod
     def update_debt(post_data: Dict[str, Any], debt_id: int, user) -> Dict[str, Any]:
-        """Update an existing debt"""
         try:
             debt = Debts.objects.get(id=debt_id)
-            debt_names = post_data.get('names', '').strip()
-            debt_paid = post_data.get('paid')
-            debt_describe = post_data.get('describe', '').strip()
-            
-            if len(debt_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            if debt_paid:
-                debt_paid = Decimal(debt_paid)
-                if debt_paid < 0.0:
-                    debt.paid = debt.paid + abs(debt_paid)
-                else:
-                    debt.amount = debt.amount + debt_paid
-            
-            debt_describe = None if debt_describe == "" else debt_describe
-            
-            if debt.name != debt_names:
-                debt.name = debt_names
-            if debt.description != debt_describe:
-                debt.description = debt_describe
-            if debt.user != user:
-                debt.user = user
-            if debt.shop != user.shop:
-                debt.shop = user.shop
-                
+            paid_val = post_data.get('paid')
+            if paid_val:
+                val = Decimal(paid_val)
+                if val < 0: debt.paid += abs(val)
+                else: debt.amount += val
+            debt.name = post_data.get('names', '').strip()
+            debt.description = post_data.get('describe', '').strip() or None
+            debt.shop = Shop.objects.get(id=post_data.get('shop'))
             debt.save()
-            
-            logger.info(f"Debt {debt_id} updated successfully")
-            return {'success': True, 'sms': 'Debt details updated successfully!'}
-            
-        except Debts.DoesNotExist:
-            return {'success': False, 'sms': 'Debt not found.'}
-        except Exception as e:
-            logger.error(f"Error updating debt {debt_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+            return {'success': True, 'sms': 'Debt updated successfully!'}
+        except Exception: return {'success': False, 'sms': 'Operation failed..!'}
+
     @staticmethod
     def delete_debt(debt_id: int) -> Dict[str, Any]:
-        """Delete a debt"""
-        try:
-            debt = Debts.objects.get(id=debt_id)
-            debt.deleted = 1
-            debt.save()
-            
-            logger.info(f"Debt {debt_id} deleted successfully")
-            return {'success': True, 'sms': 'Debt deleted successfully!'}
-            
-        except Debts.DoesNotExist:
-            return {'success': False, 'sms': 'Debt not found.'}
-        except Exception as e:
-            logger.error(f"Error deleting debt {debt_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
+        Debts.objects.filter(id=debt_id).update(deleted=True)
+        return {'success': True, 'sms': 'Debt deleted successfully!'}
 
-
-# LOANS MANAGEMENT SERVICES
-class LoansService:
-    """Service class for handling Loans management operations"""
-    
+class LoansService(BaseService):
     @staticmethod
     def create_loan(post_data: Dict[str, Any], user) -> Dict[str, Any]:
-        """Create a new loan"""
         try:
-            loan_names = post_data.get('names', '').strip()
-            loan_amount = post_data.get('amount')
-            loan_describe = post_data.get('describe', '').strip()
-            
-            if len(loan_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            loan_describe = None if loan_describe == "" else loan_describe
-            
             Loans.objects.create(
-                name=loan_names,
-                amount=loan_amount,
-                description=loan_describe,
-                user=user,
-                shop=user.shop
+                name=post_data.get('names', '').strip(),
+                amount=post_data.get('amount'),
+                description=post_data.get('describe', '').strip() or None,
+                user=user, shop=Shop.objects.get(id=post_data.get('shop'))
             )
-            
-            logger.info("New loan created successfully")
             return {'success': True, 'sms': 'New loan added successfully!'}
-            
-        except Exception as e:
-            logger.error(f"Error creating loan: {str(e)}")
-            return {'success': False, 'sms': str(e)}
-    
+        except Exception: return {'success': False, 'sms': 'Operation failed'}
+
     @staticmethod
     def update_loan(post_data: Dict[str, Any], loan_id: int, user) -> Dict[str, Any]:
-        """Update an existing loan"""
         try:
             loan = Loans.objects.get(id=loan_id)
-            loan_names = post_data.get('names', '').strip()
-            loan_paid = post_data.get('paid')
-            loan_describe = post_data.get('describe', '').strip()
-            
-            if len(loan_names) < 3:
-                return {'success': False, 'sms': 'Names must have atleast 3 characters.'}
-            
-            if loan_paid:
-                loan_paid = Decimal(loan_paid)
-                if loan_paid < 0.0:
-                    loan.paid = loan.paid + abs(loan_paid)
-                else:
-                    loan.amount = loan.amount + loan_paid
-            
-            loan_describe = None if loan_describe == "" else loan_describe
-            
-            if loan.name != loan_names:
-                loan.name = loan_names
-            if loan.description != loan_describe:
-                loan.description = loan_describe
-            if loan.user != user:
-                loan.user = user
-            if loan.shop != user.shop:
-                loan.shop = user.shop
-                
+            paid_val = post_data.get('paid')
+            if paid_val:
+                val = Decimal(paid_val)
+                if val < 0: loan.paid += abs(val)
+                else: loan.amount += val
+            loan.name = post_data.get('names', '').strip()
+            loan.description = post_data.get('describe', '').strip() or None
+            loan.shop = Shop.objects.get(id=post_data.get('shop'))
             loan.save()
-            
-            logger.info(f"Loan {loan_id} updated successfully")
-            return {'success': True, 'sms': 'Loan details updated successfully!'}
-            
-        except Loans.DoesNotExist:
-            return {'success': False, 'sms': 'Loan not found.'}
-        except Exception as e:
-            logger.error(f"Error updating loan {loan_id}: {str(e)}")
-            return {'success': False, 'sms': str(e)}
-    
+            return {'success': True, 'sms': 'Loan updated successfully!'}
+        except Exception: return {'success': False, 'sms': 'Operation failed'}
+
     @staticmethod
     def delete_loan(loan_id: int) -> Dict[str, Any]:
-        """Delete a loan"""
-        try:
-            loan = Loans.objects.get(id=loan_id)
-            loan.deleted = 1
-            loan.save()
-            
-            logger.info(f"Loan {loan_id} deleted successfully")
-            return {'success': True, 'sms': 'Loan deleted successfully!'}
-            
-        except Loans.DoesNotExist:
-            return {'success': False, 'sms': 'Loan not found.'}
-        except Exception as e:
-            logger.error(f"Error deleting loan {loan_id}: {str(e)}")
-            return {'success': False, 'sms': str(e)}
+        Loans.objects.filter(id=loan_id).update(deleted=True)
+        return {'success': True, 'sms': 'Loan deleted successfully!'}
 
-
-# EXPENSES MANAGEMENT SERVICES
-class ExpensesService:
-    """Service class for handling Expenses management operations"""
-    
+class ExpensesService(BaseService):
     @staticmethod
     def create_expense(post_data: Dict[str, Any], user) -> Dict[str, Any]:
-        """Create a new expense"""
         try:
-            exp_date = post_data.get('dates')
-            exp_shop = post_data.get('shop')
-            exp_title = post_data.get('title', '').strip()
-            exp_amount = post_data.get('amount')
-            exp_describe = post_data.get('describe', '').strip()
-            
-            if len(exp_title) < 3:
-                return {'success': False, 'sms': 'Title must have atleast 3 characters.'}
-            
-            if not Shop.objects.filter(id=exp_shop).exists():
-                return {'success': False, 'sms': 'Selected shop does not exist.'}
-            
-            exp_describe = None if exp_describe == "" else exp_describe
-            
+            shop = Shop.objects.get(id=post_data.get('shop'))
             Expenses.objects.create(
-                dates=exp_date,
-                title=exp_title,
-                amount=exp_amount,
-                description=exp_describe,
-                user=user,
-                shop=Shop.objects.get(id=exp_shop)
+                dates=post_data.get('dates'), title=post_data.get('title', '').strip(),
+                amount=post_data.get('amount'), description=post_data.get('describe', '').strip() or None,
+                user=user, shop=shop
             )
-            
-            logger.info("New expense created successfully")
-            return {'success': True, 'sms': 'New expense added successfully!'}
-            
-        except Exception as e:
-            logger.error(f"Error creating expense: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+            return {'success': True, 'sms': 'Expense added successfully!'}
+        except Exception: return {'success': False, 'sms': 'Operation failed..!'}
+
     @staticmethod
     def update_expense(post_data: Dict[str, Any], expense_id: int, user) -> Dict[str, Any]:
-        """Update an existing expense"""
         try:
             expense = Expenses.objects.get(id=expense_id)
-            exp_date = post_data.get('dates')
-            exp_shop = post_data.get('shop')
-            exp_title = post_data.get('title', '').strip()
-            exp_amount = post_data.get('amount')
-            exp_describe = post_data.get('describe', '').strip()
-            
-            if len(exp_title) < 3:
-                return {'success': False, 'sms': 'Title must have atleast 3 characters.'}
-            
-            if not Shop.objects.filter(id=exp_shop).exists():
-                return {'success': False, 'sms': 'Selected shop does not exist.'}
-            
-            exp_describe = None if exp_describe == "" else exp_describe
-            
-            expense.dates = exp_date
-            expense.title = exp_title
-            expense.amount = exp_amount
-            expense.description = exp_describe
-            expense.user = user
-            expense.shop = Shop.objects.get(id=exp_shop)
+            expense.dates = post_data.get('dates')
+            expense.title = post_data.get('title', '').strip()
+            expense.amount = post_data.get('amount')
+            expense.shop = Shop.objects.get(id=post_data.get('shop'))
+            expense.description = post_data.get('describe', '').strip() or None
             expense.save()
-            
-            logger.info(f"Expense {expense_id} updated successfully")
-            return {'success': True, 'sms': 'Expense details updated successfully!'}
-            
-        except Expenses.DoesNotExist:
-            return {'success': False, 'sms': 'Expense not found.'}
-        except Exception as e:
-            logger.error(f"Error updating expense {expense_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+            return {'success': True, 'sms': 'Expense updated successfully!'}
+        except Exception: return {'success': False, 'sms': 'Operation failed..!'}
+
     @staticmethod
     def delete_expense(expense_id: int) -> Dict[str, Any]:
-        """Delete an expense"""
-        try:
-            expense = Expenses.objects.get(id=expense_id)
-            expense.deleted = 1
-            expense.save()
-            
-            logger.info(f"Expense {expense_id} deleted successfully")
-            return {'success': True, 'sms': 'Expense deleted successfully!'}
-            
-        except Expenses.DoesNotExist:
-            return {'success': False, 'sms': 'Expense not found.'}
-        except Exception as e:
-            logger.error(f"Error deleting expense {expense_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+        Expenses.objects.filter(id=expense_id).update(deleted=True)
+        return {'success': True, 'sms': 'Expense deleted successfully!'}
+
     @staticmethod
     def view_expense(expense_id: int) -> Dict[str, Any]:
-        """View expense details"""
         try:
-            expense = Expenses.objects.get(id=expense_id)
-            
+            exp = Expenses.objects.select_related('user', 'shop').get(id=expense_id)
             return {
                 'success': True,
-                'regdate': expense.created_at.strftime('%d-%b-%Y %H:%M:%S'),
-                'dates': expense.dates.strftime('%d-%b-%Y'),
-                'dates_form': expense.dates,
-                'title': expense.title,
-                'amount': format_number(expense.amount) + ' TZS',
-                'amount_form': expense.amount,
-                'describe': 'N/A' if expense.description is None else expense.description,
-                'user': expense.user.username,
-                'shop': f"{expense.shop.names} ({expense.shop.abbrev})",
-                'shop_id': expense.shop.id,
+                'regdate': conv_timezone(exp.created_at, '%d-%b-%Y %H:%M:%S'),
+                'updatedate': conv_timezone(exp.updated_at, '%d-%b-%Y %H:%M:%S'),
+                'dates': exp.dates.strftime('%d-%b-%Y'),
+                'dates_form': exp.dates, 'title': exp.title,
+                'amount': format_number(exp.amount) + ' TZS',
+                'amount_form': exp.amount, 'describe': exp.description or 'N/A',
+                'user': exp.user.username, 'shop': f"{exp.shop.names} ({exp.shop.abbrev})",
+                'shop_id': exp.shop.id,
             }
-            
-        except Expenses.DoesNotExist:
-            return {'success': False, 'sms': 'Expense not found.'}
-        except Exception as e:
-            logger.error(f"Error viewing expense {expense_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
+        except Exception: return {'success': False, 'sms': 'Expense not found.'}
 
-
-# MAUZO MANAGEMENT SERVICES
-class MauzoService:
-    """Service class for handling Mauzo management operations"""
-    
+class MauzoService(BaseService):
     @staticmethod
     def create_mauzo(post_data: Dict[str, Any], user) -> Dict[str, Any]:
-        """Create a new expense"""
         try:
-            mauzo_date = post_data.get('dates')
-            mauzo_shop = post_data.get('shop')
-            mauzo_amount = post_data.get('amount')
-            mauzo_describe = post_data.get('describe', '').strip()
-            
-            if not Shop.objects.filter(id=mauzo_shop).exists():
-                return {'success': False, 'sms': 'Selected shop does not exist.'}
-            
-            mauzo_describe = None if mauzo_describe == "" else mauzo_describe
-            
             Mauzo.objects.create(
-                dates=mauzo_date,
-                amount=mauzo_amount,
-                description=mauzo_describe,
-                user=user,
-                shop=Shop.objects.get(id=mauzo_shop)
+                dates=post_data.get('dates'), amount=post_data.get('amount'),
+                description=post_data.get('describe', '').strip() or None,
+                user=user, shop=Shop.objects.get(id=post_data.get('shop'))
             )
-            
-            logger.info("New mauzo/sales created successfully")
-            return {'success': True, 'sms': 'New sales(mauzo) recorded successfully!'}
-            
-        except Exception as e:
-            logger.error(f"Error creating expense: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+            return {'success': True, 'sms': 'Sales recorded successfully!'}
+        except Exception: return {'success': False, 'sms': 'Operation failed..!'}
+
     @staticmethod
     def update_mauzo(post_data: Dict[str, Any], mauzo_id: int, user) -> Dict[str, Any]:
-        """Update an existing sales/mauzo"""
         try:
-            mauzo_item = Mauzo.objects.get(id=mauzo_id)
-            mauzo_date = post_data.get('dates')
-            mauzo_shop = post_data.get('shop')
-            mauzo_amount = post_data.get('amount')
-            mauzo_describe = post_data.get('describe', '').strip()
-            
-            if not Shop.objects.filter(id=mauzo_shop).exists():
-                return {'success': False, 'sms': 'Selected shop does not exist.'}
-            
-            mauzo_describe = None if mauzo_describe == "" else mauzo_describe
-            
-            mauzo_item.dates = mauzo_date
-            mauzo_item.amount = mauzo_amount
-            mauzo_item.description = mauzo_describe
-            mauzo_item.user = user
-            mauzo_item.shop = Shop.objects.get(id=mauzo_shop)
-            mauzo_item.save()
-            
-            logger.info(f"Mauzo/Sale {mauzo_id} updated successfully")
-            return {'success': True, 'sms': 'Sales/Mauzo details updated successfully!'}
-            
-        except Mauzo.DoesNotExist:
-            return {'success': False, 'sms': 'Sale/Mauzo not found.'}
-        except Exception as e:
-            logger.error(f"Error updating mauzo {mauzo_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+            item = Mauzo.objects.get(id=mauzo_id)
+            item.dates = post_data.get('dates')
+            item.amount = post_data.get('amount')
+            item.shop = Shop.objects.get(id=post_data.get('shop'))
+            item.description = post_data.get('describe', '').strip() or None
+            item.save()
+            return {'success': True, 'sms': 'Sales updated successfully!'}
+        except Exception: return {'success': False, 'sms': 'Operation failed..!'}
+
     @staticmethod
     def delete_mauzo(mauzo_id: int) -> Dict[str, Any]:
-        """Delete sales/mauzo"""
-        try:
-            mauzo_item = Mauzo.objects.get(id=mauzo_id)
-            mauzo_item.deleted = 1
-            mauzo_item.save()
-            
-            logger.info(f"Mauzo {mauzo_id} deleted successfully")
-            return {'success': True, 'sms': 'Sales/Mauzo deleted successfully!'}
-            
-        except Mauzo.DoesNotExist:
-            return {'success': False, 'sms': 'Sales/mauzo not found.'}
-        except Exception as e:
-            logger.error(f"Error deleting mauzo {mauzo_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
-    
+        Mauzo.objects.filter(id=mauzo_id).update(deleted=True)
+        return {'success': True, 'sms': 'Sales deleted successfully!'}
+
     @staticmethod
     def view_mauzo(mauzo_id: int) -> Dict[str, Any]:
-        """View mauzo details"""
         try:
-            mauzo_item = Mauzo.objects.get(id=mauzo_id)
-            
+            m = Mauzo.objects.select_related('user', 'shop').get(id=mauzo_id)
             return {
                 'success': True,
-                'regdate': mauzo_item.created_at.strftime('%d-%b-%Y %H:%M:%S'),
-                'dates': mauzo_item.dates.strftime('%d-%b-%Y'),
-                'dates_form': mauzo_item.dates,
-                'amount': format_number(mauzo_item.amount) + ' TZS',
-                'amount_form': mauzo_item.amount,
-                'describe': 'N/A' if mauzo_item.description is None else mauzo_item.description,
-                'user': mauzo_item.user.username,
-                'shop': f"{mauzo_item.shop.names} ({mauzo_item.shop.abbrev})",
-                'shop_id': mauzo_item.shop.id,
+                'regdate': conv_timezone(m.created_at, '%d-%b-%Y %H:%M:%S'),
+                'updatedate': conv_timezone(m.updated_at, '%d-%b-%Y %H:%M:%S'),
+                'dates': m.dates.strftime('%d-%b-%Y'),
+                'dates_form': m.dates, 'amount': format_number(m.amount) + ' TZS',
+                'amount_form': m.amount, 'describe': m.description or 'N/A',
+                'user': m.user.username, 'shop': f"{m.shop.names} ({m.shop.abbrev})",
+                'shop_id': m.shop.id,
             }
-            
-        except Mauzo.DoesNotExist:
-            return {'success': False, 'sms': 'Sales/Mauzo not found.'}
-        except Exception as e:
-            logger.error(f"Error viewing sales/mauzo {mauzo_id}: {str(e)}")
-            return {'success': False, 'sms': 'Operation failed..!'}
+        except Exception: return {'success': False, 'sms': 'Sales not found.'}
 
+# --- DATATABLES ENGINE (OPTIMIZED) ---
 
-
-# DATATABLES UTILITIES
-class DataTablesService:
-    """Service class for handling DataTables functionality"""
+class DataTablesEngine:
+    """Core engine to handle DB-level DataTables operations with correct record counting"""
     
     @staticmethod
-    def parse_request_params(request: HttpRequest) -> Dict[str, Any]:
-        """Parse DataTables AJAX request parameters"""
-        return {
-            'draw': int(request.POST.get('draw', 0)),
-            'start': int(request.POST.get('start', 0)),
-            'length': int(request.POST.get('length', 10)),
-            'search_value': request.POST.get('search[value]', ''),
-            'order_column_index': int(request.POST.get('order[0][column]', 1)),
-            'order_dir': request.POST.get('order[0][dir]', 'desc'),
-            'start_date_str': request.POST.get('startdate'),
-            'end_date_str': request.POST.get('enddate'),
-        }
-    
-    @staticmethod
-    def apply_date_filtering(queryset: QuerySet, start_date_str: str, end_date_str: str) -> QuerySet:
-        """Apply date range filtering to queryset"""
-        try:
-            parsed_start_date = None
-            parsed_end_date = None
-            
-            if start_date_str:
-                parsed_start_date = parse(start_date_str).astimezone(zoneinfo.ZoneInfo("UTC"))
-            
-            if end_date_str:
-                parsed_end_date = parse(end_date_str).astimezone(zoneinfo.ZoneInfo("UTC"))
-            
-            if parsed_start_date and parsed_end_date:
-                return queryset.filter(created_at__range=(parsed_start_date, parsed_end_date))
-            elif parsed_start_date:
-                return queryset.filter(created_at__gte=parsed_start_date)
-            elif parsed_end_date:
-                return queryset.filter(created_at__lte=parsed_end_date)
-                
-        except Exception as e:
-            logger.warning(f"Date filtering error: {str(e)}")
+    def handle_request(request: HttpRequest, queryset: QuerySet, 
+                       search_fields: List[str], 
+                       column_map: Dict[int, str],
+                       numeric_fields: List[str] = None) -> Dict[str, Any]:
         
-        return queryset
-    
-    @staticmethod
-    def apply_sorting(data: List[Dict], column_mapping: Dict, order_column_index: int, order_dir: str) -> List[Dict]:
-        """Apply sorting to data list"""
-        order_column_name = column_mapping.get(order_column_index, 'dates')
-        reverse_order = order_dir == 'desc'
+        # 1. Base Count (Unfiltered)
+        records_total = queryset.count()
         
-        return sorted(data, key=lambda x: x[order_column_name], reverse=reverse_order)
-    
-    @staticmethod
-    def apply_column_filtering(data: List[Dict], request: HttpRequest, column_mapping: Dict, column_filter_types: Dict) -> List[Dict]:
-        """Apply individual column filtering"""
-        filtered_data = data
+        # 2. Extract DataTables parameters
+        draw = int(request.POST.get('draw', 1))
+        start = int(request.POST.get('start', 0))
+        length = int(request.POST.get('length', 10))
+        search_val = request.POST.get('search[value]', '').strip()
         
-        for i in range(len(column_mapping)):
-            column_search = request.POST.get(f'columns[{i}][search][value]', '')
-            if column_search:
-                column_field = column_mapping.get(i)
-                if column_field:
-                    filter_type = column_filter_types.get(column_field, 'contains')
-                    filtered_data = [
-                        item for item in filtered_data 
-                        if filter_items(column_field, column_search, item, filter_type)
-                    ]
+        # 3. Date Filtering (DB Level)
+        start_date = request.POST.get('startdate')
+        end_date = request.POST.get('enddate')
+        date_field = 'dates' if 'dates' in [f.name for f in queryset.model._meta.fields] else 'created_at'
         
-        return filtered_data
-    
-    @staticmethod
-    def apply_global_search(data: List[Dict], search_value: str) -> List[Dict]:
-        """Apply global search filtering"""
-        if not search_value:
-            return data
-        
-        search_lower = search_value.lower()
-        return [
-            item for item in data 
-            if any(str(value).lower().find(search_lower) != -1 for value in item.values())
-        ]
-    
-    @staticmethod
-    def paginate_data(data: List[Dict], start: int, length: int) -> List[Dict]:
-        """Apply pagination to data"""
-        if length < 0:
-            return data
-        return data[start:start + length]
-    
-    @staticmethod
-    def calculate_row_count_start(start: int, length: int) -> int:
-        """Calculate row count start for pagination"""
-        page_number = start // length + 1 if length > 0 else 1
-        return (page_number - 1) * length + 1
+        if start_date:
+            try: queryset = queryset.filter(**{f"{date_field}__gte": parse(start_date)})
+            except: pass
+        if end_date:
+            try: queryset = queryset.filter(**{f"{date_field}__lte": parse(end_date)})
+            except: pass
 
+        # 4. Global Search (DB Level)
+        if search_val:
+            q_obj = Q()
+            for field in search_fields:
+                q_obj |= Q(**{f"{field}__icontains": search_val})
+            queryset = queryset.filter(q_obj)
 
-# SELCOMPAY DATA PROCESSING
-class SelcomPayDataService:
-    """Service class for SelcomPay data processing"""
-    
-    COLUMN_MAPPING = {
-        0: 'id',
-        1: 'dates',
-        2: 'names',
-        3: 'amount',
-        4: 'profit',
-        5: 'shop',
-        6: 'user'
-    }
-    
-    COLUMN_FILTER_TYPES = {
-        'profit': 'numeric',
-        'amount': 'numeric',
-    }
-    
-    @staticmethod
-    def prepare_base_data(queryset: QuerySet) -> List[Dict[str, Any]]:
-        """Convert SelcomPay queryset to list of dicts"""
-        return [
-            {
-                'id': transact.id,
-                'dates': transact.created_at,
-                'names': transact.name,
-                'amount': transact.amount,
-                'profit': selcom_profit(transact.amount),
-                'shop': transact.shop.abbrev,
-                'user': f'{transact.user.username} (Admin)' if transact.user.is_admin else transact.user.username,
-                'describe': transact.description if transact.description else ""
-            }
-            for transact in queryset
-        ]
-    
-    @staticmethod
-    def format_final_data(data: List[Dict], row_count_start: int) -> List[Dict]:
-        """Format data for final DataTables response"""
-        return [
-            {
-                'count': row_count_start + i,
-                'id': item.get('id'),
-                'dates': conv_timezone(item.get('dates'), '%d-%b-%Y %H:%M'),
-                'names': item.get('names'),
-                'shop': item.get('shop'),
-                'user': item.get('user'),
-                'amount': format_number(item.get('amount')),
-                'profit': format_number(item.get('profit')),
-                'describe': item.get('describe'),
-                'action': ""
-            }
-            for i, item in enumerate(data)
-        ]
-    
-    @staticmethod
-    def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
-        """Calculate grand totals for SelcomPay data"""
-        total_amount = sum(item['amount'] for item in data)
-        total_profit = sum(item['profit'] for item in data)
-        return {
-            'total_amount': format_number(total_amount),
-            'total_profit': format_number(total_profit),
-        }
+        # 5. Individual Column Search (Replacing filter_items loop)
+        for i in range(len(column_map)):
+            col_search = request.POST.get(f'columns[{i}][search][value]', '').strip()
+            if col_search:
+                field = column_map.get(i)
+                if numeric_fields and field in numeric_fields:
+                    num_q = get_numeric_filter(field, col_search)
+                    if num_q: queryset = queryset.filter(num_q)
+                else:
+                    queryset = queryset.filter(**{f"{field}__icontains": col_search})
 
+        # 6. Filtered Count (Before slicing)
+        records_filtered = queryset.count()
 
-# LIPANAMBA DATA PROCESSING
-class LipaNambaDataService:
-    """Service class for LipaNamba data processing"""
-    
-    COLUMN_MAPPING = {
-        0: 'id',
-        1: 'dates',
-        2: 'names',
-        3: 'amount',
-        4: 'profit',
-        5: 'shop',
-        6: 'user',
-    }
-    
-    COLUMN_FILTER_TYPES = {
-        'profit': 'numeric',
-        'amount': 'numeric',
-    }
-    
-    @staticmethod
-    def prepare_base_data(queryset: QuerySet) -> List[Dict[str, Any]]:
-        """Convert LipaNamba queryset to list of dicts"""
-        return [
-            {
-                'id': transact.id,
-                'dates': transact.created_at,
-                'names': transact.name,
-                'amount': transact.amount,
-                'shop': transact.shop.abbrev,
-                'user': f'{transact.user.username} (Admin)' if transact.user.is_admin else transact.user.username,
-                'profit': lipa_profit(transact.amount),
-                'describe': transact.description if transact.description else ""
-            }
-            for transact in queryset
-        ]
-    
-    @staticmethod
-    def format_final_data(data: List[Dict], row_count_start: int) -> List[Dict]:
-        """Format data for final DataTables response"""
-        return [
-            {
-                'count': row_count_start + i,
-                'id': item.get('id'),
-                'dates': conv_timezone(item.get('dates'), '%d-%b-%Y %H:%M'),
-                'names': item.get('names'),
-                'shop': item.get('shop'),
-                'user': item.get('user'),
-                'amount': format_number(item.get('amount')),
-                'profit': format_number(item.get('profit')),
-                'describe': item.get('describe'),
-                'action': ""
-            }
-            for i, item in enumerate(data)
-        ]
-    
-    @staticmethod
-    def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
-        """Calculate grand totals for LipaNamba data"""
-        total_amount = sum(item['amount'] for item in data)
-        total_profit = sum(item['profit'] for item in data)
-        return {
-            'total_amount': format_number(total_amount),
-            'total_profit': format_number(total_profit),
-        }
-
-
-# DEBTS DATA PROCESSING
-class DebtsDataService:
-    """Service class for Debts data processing"""
-    
-    COLUMN_MAPPING = {
-        0: 'id',
-        1: 'dates',
-        2: 'names',
-        3: 'amount',
-        4: 'paid',
-        5: 'balance',
-        6: 'shop',
-        7: 'user',
-    }
-    
-    COLUMN_FILTER_TYPES = {
-        'paid': 'numeric',
-        'amount': 'numeric',
-        'balance': 'numeric',
-    }
-    
-    @staticmethod
-    def prepare_base_data(queryset: QuerySet) -> List[Dict[str, Any]]:
-        """Convert Debts queryset to list of dicts"""
-        return [
-            {
-                'id': debt.id,
-                'dates': debt.created_at,
-                'names': debt.name,
-                'amount': debt.amount,
-                'paid': debt.paid,
-                'balance': debt.amount - debt.paid,
-                'user': f'{debt.user.username} (Admin)' if debt.user.is_admin else debt.user.username,
-                'shop': debt.shop.abbrev,
-                'describe': debt.description if debt.description else ""
-            }
-            for debt in queryset
-        ]
-    
-    @staticmethod
-    def format_final_data(data: List[Dict], row_count_start: int) -> List[Dict]:
-        """Format data for final DataTables response"""
-        return [
-            {
-                'count': row_count_start + i,
-                'id': item.get('id'),
-                'dates': conv_timezone(item.get('dates'), '%d-%b-%Y %H:%M'),
-                'names': item.get('names'),
-                'amount': format_number(item.get('amount')),
-                'paid': format_number(item.get('paid')),
-                'balance': format_number(item.get('balance')),
-                'describe': item.get('describe'),
-                'shop': item.get('shop'),
-                'user': item.get('user'),
-                'action': ""
-            }
-            for i, item in enumerate(data)
-        ]
-    
-    @staticmethod
-    def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
-        """Calculate grand totals for Debts data"""
-        total_amount = sum(item['amount'] for item in data)
-        total_paid = sum(item['paid'] for item in data)
-        total_balance = sum(item['balance'] for item in data)
-        return {
-            'total_amount': format_number(total_amount),
-            'total_paid': format_number(total_paid),
-            'total_balance': format_number(total_balance),
-        }
-
-
-# LOANS DATA PROCESSING
-class LoansDataService:
-    """Service class for Loans data processing"""
-    
-    COLUMN_MAPPING = {
-        0: 'id',
-        1: 'dates',
-        2: 'names',
-        3: 'amount',
-        4: 'paid',
-        5: 'balance',
-        6: 'shop',
-        7: 'user',
-    }
-    
-    COLUMN_FILTER_TYPES = {
-        'paid': 'numeric',
-        'amount': 'numeric',
-        'balance': 'numeric',
-    }
-    
-    @staticmethod
-    def prepare_base_data(queryset: QuerySet) -> List[Dict[str, Any]]:
-        """Convert Loans queryset to list of dicts"""
-        return [
-            {
-                'id': loan.id,
-                'dates': loan.created_at,
-                'names': loan.name,
-                'amount': loan.amount,
-                'paid': loan.paid,
-                'balance': loan.amount - loan.paid,
-                'user': f'{loan.user.username} (Admin)' if loan.user.is_admin else loan.user.username,
-                'shop': loan.shop.abbrev,
-                'describe': loan.description if loan.description else ""
-            }
-            for loan in queryset
-        ]
-    
-    @staticmethod
-    def format_final_data(data: List[Dict], row_count_start: int) -> List[Dict]:
-        """Format data for final DataTables response"""
-        return [
-            {
-                'count': row_count_start + i,
-                'id': item.get('id'),
-                'dates': conv_timezone(item.get('dates'), '%d-%b-%Y %H:%M'),
-                'names': item.get('names'),
-                'amount': format_number(item.get('amount')),
-                'paid': format_number(item.get('paid')),
-                'balance': format_number(item.get('balance')),
-                'describe': item.get('describe'),
-                'shop': item.get('shop'),
-                'user': item.get('user'),
-                'action': ""
-            }
-            for i, item in enumerate(data)
-        ]
-    
-    @staticmethod
-    def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
-        """Calculate grand totals for Loans data"""
-        total_amount = sum(item['amount'] for item in data)
-        total_paid = sum(item['paid'] for item in data)
-        total_balance = sum(item['balance'] for item in data)
-        return {
-            'total_amount': format_number(total_amount),
-            'total_paid': format_number(total_paid),
-            'total_balance': format_number(total_balance),
-        }
-
-
-# EXPENSES DATA PROCESSING
-class ExpensesDataService:
-    """Service class for Expenses data processing"""
-    
-    COLUMN_MAPPING = {
-        0: 'id',
-        1: 'dates',
-        2: 'title',
-        3: 'amount',
-        4: 'user',
-        5: 'shop'
-    }
-    
-    COLUMN_FILTER_TYPES = {
-        'amount': 'numeric',
-    }
-    
-    @staticmethod
-    def prepare_base_data(queryset: QuerySet) -> List[Dict[str, Any]]:
-        """Convert Expenses queryset to list of dicts"""
-        return [
-            {
-                'id': expense.id,
-                'dates': expense.dates,
-                'title': expense.title,
-                'amount': expense.amount,
-                'user': f'{expense.user.username} (Admin)' if expense.user.is_admin else expense.user.username,
-                'shop': expense.shop.abbrev
-            }
-            for expense in queryset
-        ]
-    
-    @staticmethod
-    def format_final_data(data: List[Dict], row_count_start: int) -> List[Dict]:
-        """Format data for final DataTables response"""
-        return [
-            {
-                'count': row_count_start + i,
-                'id': item.get('id'),
-                'dates': item.get('dates').strftime('%d-%b-%Y'),
-                'title': item.get('title'),
-                'amount': format_number(item.get('amount')),
-                'user': item.get('user'),
-                'shop': item.get('shop'),
-                'action': ""
-            }
-            for i, item in enumerate(data)
-        ]
-    
-    @staticmethod
-    def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
-        """Calculate grand totals for Expenses data"""
-        total_amount = sum(item['amount'] for item in data)
-        return {
-            'total_amount': format_number(total_amount),
-        }
-    
-    @staticmethod
-    def apply_date_filtering_legacy(queryset: QuerySet, start_date_str: str, end_date_str: str) -> QuerySet:
-        """Apply date range filtering using legacy date format"""
-        try:
-            format_date_string = "%Y-%m-%d"
-            date_range_filters = Q()
-            
-            start_date = None
-            end_date = None
-            
-            if start_date_str:
-                start_date = datetime.strptime(start_date_str, format_date_string).date()
-            if end_date_str:
-                end_date = datetime.strptime(end_date_str, format_date_string).date()
-
-            if start_date and end_date:
-                date_range_filters |= Q(dates__range=(start_date, end_date))
+        # 7. Sorting (DB Level)
+        order_idx = int(request.POST.get('order[0][column]', 1))
+        order_dir = request.POST.get('order[0][dir]', 'desc')
+        sort_field = column_map.get(order_idx, date_field)
+        if (numeric_fields and sort_field in numeric_fields) or sort_field == date_field:
+            ordering = sort_field
+            if order_dir == 'desc':
+                ordering = f"-{sort_field}"
+            queryset = queryset.order_by(ordering)
+        else:
+            sort_expression = Lower(sort_field)
+            if order_dir == 'desc':
+                queryset = queryset.order_by(sort_expression.desc())
             else:
-                if start_date:
-                    date_range_filters |= Q(dates__gte=start_date)
-                elif end_date:
-                    date_range_filters |= Q(dates__lte=end_date)
+                queryset = queryset.order_by(sort_expression.asc())
 
-            if date_range_filters:
-                return queryset.filter(date_range_filters)
-                
-        except Exception as e:
-            logger.warning(f"Date filtering error: {str(e)}")
+        # 8. Pagination
+        paged_data = queryset[start:start+length] if length > 0 else queryset
         
-        return queryset
-
-
-# MAUZO DATA PROCESSING
-class MauzoDataService:
-    """Service class for sales/mauzo data processing"""
-    
-    COLUMN_MAPPING = {
-        0: 'id',
-        1: 'dates',
-        2: 'amount',
-        3: 'user',
-        4: 'shop'
-    }
-    
-    COLUMN_FILTER_TYPES = {
-        'amount': 'numeric',
-    }
-    
-    @staticmethod
-    def prepare_base_data(queryset: QuerySet) -> List[Dict[str, Any]]:
-        """Convert mauzo queryset to list of dicts"""
-        return [
-            {
-                'id': mauzo.id,
-                'dates': mauzo.dates,
-                'amount': mauzo.amount,
-                'user': f'{mauzo.user.username} (Admin)' if mauzo.user.is_admin else mauzo.user.username,
-                'shop': mauzo.shop.abbrev
-            }
-            for mauzo in queryset
-        ]
-    
-    @staticmethod
-    def format_final_data(data: List[Dict], row_count_start: int) -> List[Dict]:
-        """Format data for final DataTables response"""
-        return [
-            {
-                'count': row_count_start + i,
-                'id': item.get('id'),
-                'dates': item.get('dates').strftime('%d-%b-%Y'),
-                'amount': format_number(item.get('amount')),
-                'user': item.get('user'),
-                'shop': item.get('shop'),
-                'action': ""
-            }
-            for i, item in enumerate(data)
-        ]
-    
-    @staticmethod
-    def calculate_grand_totals(data: List[Dict]) -> Dict[str, str]:
-        """Calculate grand totals for sales/mauzo data"""
-        total_amount = sum(item['amount'] for item in data)
         return {
-            'total_amount': format_number(total_amount),
+            'draw': draw,
+            'recordsTotal': records_total,
+            'recordsFiltered': records_filtered,
+            'data': paged_data,
+            'full_queryset': queryset # For totals/aggregates
         }
-    
-    @staticmethod
-    def apply_date_filtering_legacy(queryset: QuerySet, start_date_str: str, end_date_str: str) -> QuerySet:
-        """Apply date range filtering using legacy date format"""
-        try:
-            format_date_string = "%Y-%m-%d"
-            date_range_filters = Q()
-            
-            start_date = None
-            end_date = None
-            
-            if start_date_str:
-                start_date = datetime.strptime(start_date_str, format_date_string).date()
-            if end_date_str:
-                end_date = datetime.strptime(end_date_str, format_date_string).date()
 
-            if start_date and end_date:
-                date_range_filters |= Q(dates__range=(start_date, end_date))
-            else:
-                if start_date:
-                    date_range_filters |= Q(dates__gte=start_date)
-                elif end_date:
-                    date_range_filters |= Q(dates__lte=end_date)
-
-            if date_range_filters:
-                return queryset.filter(date_range_filters)
-                
-        except Exception as e:
-            logger.warning(f"Date filtering error: {str(e)}")
-        
-        return queryset
-
-
-# =============================================
-# VIEW FUNCTIONS
-# =============================================
+# --- VIEW FUNCTIONS ---
 
 @never_cache
 @login_required
-def selcom_transactions_page(request: HttpRequest) -> HttpResponse:
-    """Handle SelcomPay transactions page display and DataTables AJAX requests"""
-    if request.method == "POST":
-        try:
-            # Parse request parameters
-            params = DataTablesService.parse_request_params(request)
-            
-            # Base queryset
-            queryset = Selcompay.objects.filter(deleted=False)
-            if not request.user.is_admin:
-                queryset = queryset.filter(shop=request.user.shop)
-            
-            # Apply date filtering
-            queryset = DataTablesService.apply_date_filtering(
-                queryset, params['start_date_str'], params['end_date_str']
-            )
-            
-            # Prepare base data
-            base_data = SelcomPayDataService.prepare_base_data(queryset)
-            total_records = len(base_data)
-            
-            # Apply sorting
-            base_data = DataTablesService.apply_sorting(
-                base_data, SelcomPayDataService.COLUMN_MAPPING, 
-                params['order_column_index'], params['order_dir']
-            )
-            
-            # Apply column filtering
-            base_data = DataTablesService.apply_column_filtering(
-                base_data, request, SelcomPayDataService.COLUMN_MAPPING, 
-                SelcomPayDataService.COLUMN_FILTER_TYPES
-            )
-            
-            # Apply global search
-            base_data = DataTablesService.apply_global_search(base_data, params['search_value'])
-            
-            # Calculate filtered record count and grand totals
-            records_filtered = len(base_data)
-            grand_totals = SelcomPayDataService.calculate_grand_totals(base_data)
-            
-            # Apply pagination
-            paginated_data = DataTablesService.paginate_data(
-                base_data, params['start'], params['length']
-            )
-            
-            # Calculate row count start
-            row_count_start = DataTablesService.calculate_row_count_start(
-                params['start'], params['length']
-            )
-            
-            # Format final data
-            final_data = SelcomPayDataService.format_final_data(paginated_data, row_count_start)
-            
-            # Prepare AJAX response
-            ajax_response = {
-                'draw': params['draw'],
-                'recordsTotal': total_records,
-                'recordsFiltered': records_filtered,
-                'data': final_data,
-                'grand_totals': grand_totals
-            }
-            return JsonResponse(ajax_response)
-            
-        except Exception as e:
-            logger.error(f"Error in selcom_transactions_page DataTables: {str(e)}")
-            return JsonResponse({
-                'draw': 0,
-                'recordsTotal': 0,
-                'recordsFiltered': 0,
-                'data': [],
-                'error': 'Failed to load data'
+def selcompay (request: HttpRequest) -> HttpResponse:
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        qs = Selcompay.objects.filter(deleted=False).select_related('user', 'shop')
+        if not request.user.is_admin:
+            qs = qs.filter(shop=request.user.shop)
+        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'profit', 5: 'shop__abbrev'}
+        
+        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'profit'])
+        
+        # Grand Totals (DB level)
+        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_prof=Sum('profit'))
+        
+        final_data = []
+        for i, item in enumerate(dt['data']):
+            final_data.append({
+                'count': int(request.POST.get('start', 0)) + i + 1,
+                'id': item.id,
+                'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
+                'names': item.name, 'shop': item.shop.abbrev,
+                'user': item.user.username, 'amount': format_number(item.amount),
+                'profit': format_number(item.profit), 'describe': item.description or "",
+                'action': ""
             })
-    
-    return render(request, 'miamala/selcom.html')
 
+        return JsonResponse({
+            'draw': dt['draw'],
+            'recordsTotal': dt['recordsTotal'],
+            'recordsFiltered': dt['recordsFiltered'],
+            'data': final_data,
+            'total_amount': format_number(totals['t_amt'] or 0),
+            'total_profit': format_number(totals['t_prof'] or 0)
+        })
+    return render(request, 'miamala/selcom.html', {'shops': Shop.objects.all().order_by('names')})
 
 @never_cache
 @login_required
-def selcom_transactions_actions(request: HttpRequest) -> JsonResponse:
-    """Handle SelcomPay transaction actions (add, update, delete)"""
+def lipanamba(request: HttpRequest) -> HttpResponse:
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        qs = Lipanamba.objects.filter(deleted=False).select_related('user', 'shop')
+        if not request.user.is_admin:
+            qs = qs.filter(shop=request.user.shop)
+        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'profit', 5: 'shop__abbrev'}
+        
+        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'profit'])
+        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_prof=Sum('profit'))
+        
+        final_data = [{
+            'count': int(request.POST.get('start', 0)) + i + 1,
+            'id': item.id, 'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
+            'names': item.name, 'shop': item.shop.abbrev, 'user': item.user.username,
+            'amount': format_number(item.amount), 'profit': format_number(item.profit),
+            'describe': item.description or "", 'action': ""
+        } for i, item in enumerate(dt['data'])]
+
+        return JsonResponse({
+            'draw': dt['draw'],
+            'recordsTotal': dt['recordsTotal'],
+            'recordsFiltered': dt['recordsFiltered'],
+            'data': final_data,
+            'total_amount': format_number(totals['t_amt'] or 0),
+            'total_profit': format_number(totals['t_prof'] or 0)
+        })
+    return render(request, 'miamala/lipanamba.html', {'shops': Shop.objects.all().order_by('names')})
+
+@never_cache
+@login_required
+def debts(request: HttpRequest) -> HttpResponse:
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        qs = Debts.objects.filter(deleted=False).select_related('user', 'shop').annotate(balance=F('amount')-F('paid'))
+        if not request.user.is_admin:
+            qs = qs.filter(shop=request.user.shop)
+        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'paid', 5: 'balance', 6: 'shop__abbrev'}
+        
+        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'paid', 'balance'])
+        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_paid=Sum('paid'), t_bal=Sum(F('amount')-F('paid')))
+        
+        final_data = [{
+            'count': int(request.POST.get('start', 0)) + i + 1,
+            'id': item.id, 'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
+            'names': item.name, 'amount': format_number(item.amount),
+            'paid': format_number(item.paid), 'balance': format_number(item.amount - item.paid),
+            'describe': item.description or "", 'shop': item.shop.abbrev, 'user': item.user.username, 'action': ""
+        } for i, item in enumerate(dt['data'])]
+
+        return JsonResponse({
+            'draw': dt['draw'],
+            'recordsTotal': dt['recordsTotal'],
+            'recordsFiltered': dt['recordsFiltered'],
+            'data': final_data,
+            'total_amount': format_number(totals['t_amt'] or 0),
+            'total_paid': format_number(totals['t_paid'] or 0),
+            'total_balance': format_number(totals['t_bal'] or 0)
+        })
+    return render(request, 'miamala/debts.html', {'shops': Shop.objects.all().order_by('names')})
+
+@never_cache
+@login_required
+def loans(request: HttpRequest) -> HttpResponse:
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        qs = Loans.objects.filter(deleted=False).select_related('user', 'shop').annotate(balance=F('amount')-F('paid'))
+        if not request.user.is_admin:
+            qs = qs.filter(shop=request.user.shop)
+        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'paid', 5: 'balance', 6: 'shop__abbrev'}
+        
+        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'paid', 'balance'])
+        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_paid=Sum('paid'), t_bal=Sum(F('amount')-F('paid')))
+        
+        final_data = [{
+            'count': int(request.POST.get('start', 0)) + i + 1,
+            'id': item.id, 'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
+            'names': item.name, 'amount': format_number(item.amount),
+            'paid': format_number(item.paid), 'balance': format_number(item.amount - item.paid),
+            'describe': item.description or "", 'shop': item.shop.abbrev, 'user': item.user.username, 'action': ""
+        } for i, item in enumerate(dt['data'])]
+
+        return JsonResponse({
+            'draw': dt['draw'],
+            'recordsTotal': dt['recordsTotal'],
+            'recordsFiltered': dt['recordsFiltered'],
+            'data': final_data,
+            'total_amount': format_number(totals['t_amt'] or 0),
+            'total_paid': format_number(totals['t_paid'] or 0),
+            'total_balance': format_number(totals['t_bal'] or 0)
+        })
+    return render(request, 'miamala/loans.html', {'shops': Shop.objects.all().order_by('names')})
+
+@never_cache
+@login_required
+def expenses(request: HttpRequest) -> HttpResponse:
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        qs = Expenses.objects.filter(deleted=False).select_related('user', 'shop')
+        if not request.user.is_admin:
+            qs = qs.filter(shop=request.user.shop)
+        cols = {1: 'dates', 2: 'title', 3: 'amount', 4: 'shop__abbrev'}
+        
+        dt = DataTablesEngine.handle_request(request, qs, ['title', 'description'], cols, ['amount'])
+        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'))
+        
+        final_data = [{
+            'count': int(request.POST.get('start', 0)) + i + 1,
+            'id': item.id, 'dates': item.dates.strftime('%d-%b-%Y'),
+            'title': item.title, 'amount': format_number(item.amount),
+            'describe': item.description or "", 'shop': item.shop.abbrev,
+            'user': item.user.username, 'action': ""
+        } for i, item in enumerate(dt['data'])]
+
+        return JsonResponse({
+            'draw': dt['draw'], 'recordsTotal': dt['recordsTotal'], 'data': final_data,
+            'recordsFiltered': dt['recordsFiltered'], 'total_amount': format_number(totals['t_amt'] or 0)
+        })
+    return render(request, 'miamala/expenses.html', {'shops': Shop.objects.all().order_by('names')})
+
+@never_cache
+@login_required
+def mauzo(request: HttpRequest) -> HttpResponse:
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        qs = Mauzo.objects.filter(deleted=False).select_related('user', 'shop')
+        if not request.user.is_admin:
+            qs = qs.filter(shop=request.user.shop)
+        cols = {1: 'dates', 2: 'amount', 3: 'shop__abbrev'}
+        
+        dt = DataTablesEngine.handle_request(request, qs, ['description'], cols, ['amount'])
+        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'))
+        
+        final_data = [{
+            'count': int(request.POST.get('start', 0)) + i + 1,
+            'id': item.id, 'dates': item.dates.strftime('%d-%b-%Y'),
+            'amount': format_number(item.amount), 'describe': item.description or "",
+            'shop': item.shop.abbrev, 'user': item.user.username, 'action': ""
+        } for i, item in enumerate(dt['data'])]
+
+        return JsonResponse({
+            'draw': dt['draw'], 'recordsTotal': dt['recordsTotal'], 'data': final_data,
+            'recordsFiltered': dt['recordsFiltered'], 'total_amount': format_number(totals['t_amt'] or 0)
+        })
+    return render(request, 'miamala/mauzo.html', {'shops': Shop.objects.all().order_by('names')})
+
+# --- ACTION ROUTERS ---
+
+@never_cache
+@login_required
+def selcompay_actions(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
-        try:
-            post_data = request.POST
-            trans_id = post_data.get('transact_id')
-            delete_id = post_data.get('delete_id')
-            
-            # Route to appropriate service method
-            if delete_id:
-                result = SelcomPayService.delete_transaction(delete_id)
-            elif trans_id:
-                result = SelcomPayService.update_transaction(post_data, trans_id, request.user)
-            else:
-                result = SelcomPayService.create_transaction(post_data, request.user)
-            
-            return JsonResponse(result)
-            
-        except Exception as e:
-            logger.error(f"Error in selcom_transactions_actions: {str(e)}")
-            return JsonResponse({'success': False, 'sms': str(e)})
-
+        post = request.POST
+        t_edit, t_del = post.get('selcom_edit'), post.get('selcom_delete')
+        if t_del: return JsonResponse(SelcomPayService.delete_transaction(t_del))
+        if t_edit: return JsonResponse(SelcomPayService.update_transaction(post, t_edit, request.user))
+        return JsonResponse(SelcomPayService.create_transaction(post, request.user))
+    return JsonResponse({'success': False, 'sms': 'Invalid request'})
 
 @never_cache
 @login_required
-def lipa_transactions_page(request: HttpRequest) -> HttpResponse:
-    """Handle LipaNamba transactions page display and DataTables AJAX requests"""
-    if request.method == "POST":
-        try:
-            # Parse request parameters
-            params = DataTablesService.parse_request_params(request)
-            
-            # Base queryset
-            queryset = Lipanamba.objects.filter(deleted=False)
-            if not request.user.is_admin:
-                queryset = queryset.filter(shop=request.user.shop)
-            
-            # Apply date filtering
-            queryset = DataTablesService.apply_date_filtering(
-                queryset, params['start_date_str'], params['end_date_str']
-            )
-            
-            # Prepare base data
-            base_data = LipaNambaDataService.prepare_base_data(queryset)
-            total_records = len(base_data)
-            
-            # Apply sorting
-            base_data = DataTablesService.apply_sorting(
-                base_data, LipaNambaDataService.COLUMN_MAPPING, 
-                params['order_column_index'], params['order_dir']
-            )
-            
-            # Apply column filtering
-            base_data = DataTablesService.apply_column_filtering(
-                base_data, request, LipaNambaDataService.COLUMN_MAPPING, 
-                LipaNambaDataService.COLUMN_FILTER_TYPES
-            )
-            
-            # Apply global search
-            base_data = DataTablesService.apply_global_search(base_data, params['search_value'])
-            
-            # Calculate filtered record count and grand totals
-            records_filtered = len(base_data)
-            grand_totals = LipaNambaDataService.calculate_grand_totals(base_data)
-            
-            # Apply pagination
-            paginated_data = DataTablesService.paginate_data(
-                base_data, params['start'], params['length']
-            )
-            
-            # Calculate row count start
-            row_count_start = DataTablesService.calculate_row_count_start(
-                params['start'], params['length']
-            )
-            
-            # Format final data
-            final_data = LipaNambaDataService.format_final_data(paginated_data, row_count_start)
-            
-            # Prepare AJAX response
-            ajax_response = {
-                'draw': params['draw'],
-                'recordsTotal': total_records,
-                'recordsFiltered': records_filtered,
-                'data': final_data,
-                'grand_totals': grand_totals
-            }
-            return JsonResponse(ajax_response)
-            
-        except Exception as e:
-            logger.error(f"Error in lipa_transactions_page DataTables: {str(e)}")
-            return JsonResponse({
-                'draw': 0,
-                'recordsTotal': 0,
-                'recordsFiltered': 0,
-                'data': [],
-                'error': 'Failed to load data'
-            })
-    
-    return render(request, 'miamala/lipanamba.html')
-
-
-@never_cache
-@login_required
-def lipanamba_transactions_actions(request: HttpRequest) -> JsonResponse:
-    """Handle LipaNamba transaction actions (add, update, delete)"""
+def lipanamba_actions(request: HttpRequest) -> JsonResponse:
     if request.method == 'POST':
-        try:
-            post_data = request.POST
-            trans_id = post_data.get('transact_id')
-            delete_id = post_data.get('delete_id')
-            
-            # Route to appropriate service method
-            if delete_id:
-                result = LipaNambaService.delete_transaction(delete_id)
-            elif trans_id:
-                result = LipaNambaService.update_transaction(post_data, trans_id, request.user)
-            else:
-                result = LipaNambaService.create_transaction(post_data, request.user)
-            
-            return JsonResponse(result)
-            
-        except Exception as e:
-            logger.error(f"Error in lipanamba_transactions_actions: {str(e)}")
-            return JsonResponse({'success': False, 'sms': 'Operation failed'})
-
-
-@never_cache
-@login_required
-def debts_page(request: HttpRequest) -> HttpResponse:
-    """Handle Debts page display and DataTables AJAX requests"""
-    if request.method == "POST":
-        try:
-            # Parse request parameters
-            params = DataTablesService.parse_request_params(request)
-            
-            # Base queryset
-            queryset = Debts.objects.filter(deleted=False)
-            if not request.user.is_admin:
-                queryset = queryset.filter(shop=request.user.shop)
-            
-            # Apply date filtering
-            queryset = DataTablesService.apply_date_filtering(
-                queryset, params['start_date_str'], params['end_date_str']
-            )
-            
-            # Prepare base data
-            base_data = DebtsDataService.prepare_base_data(queryset)
-            total_records = len(base_data)
-            
-            # Apply sorting
-            base_data = DataTablesService.apply_sorting(
-                base_data, DebtsDataService.COLUMN_MAPPING, 
-                params['order_column_index'], params['order_dir']
-            )
-            
-            # Apply column filtering
-            base_data = DataTablesService.apply_column_filtering(
-                base_data, request, DebtsDataService.COLUMN_MAPPING, 
-                DebtsDataService.COLUMN_FILTER_TYPES
-            )
-            
-            # Apply global search
-            base_data = DataTablesService.apply_global_search(base_data, params['search_value'])
-            
-            # Calculate filtered record count and grand totals
-            records_filtered = len(base_data)
-            grand_totals = DebtsDataService.calculate_grand_totals(base_data)
-            
-            # Apply pagination
-            paginated_data = DataTablesService.paginate_data(
-                base_data, params['start'], params['length']
-            )
-            
-            # Calculate row count start
-            row_count_start = DataTablesService.calculate_row_count_start(
-                params['start'], params['length']
-            )
-            
-            # Format final data
-            final_data = DebtsDataService.format_final_data(paginated_data, row_count_start)
-            
-            # Prepare AJAX response
-            ajax_response = {
-                'draw': params['draw'],
-                'recordsTotal': total_records,
-                'recordsFiltered': records_filtered,
-                'data': final_data,
-                'grand_totals': grand_totals
-            }
-            return JsonResponse(ajax_response)
-            
-        except Exception as e:
-            logger.error(f"Error in debts_page DataTables: {str(e)}")
-            return JsonResponse({
-                'draw': 0,
-                'recordsTotal': 0,
-                'recordsFiltered': 0,
-                'data': [],
-                'error': 'Failed to load data'
-            })
-    
-    return render(request, 'miamala/debts.html')
-
+        post = request.POST
+        t_edit, t_del = post.get('lipa_edit'), post.get('lipa_delete')
+        if t_del: return JsonResponse(LipaNambaService.delete_transaction(t_del))
+        if t_edit: return JsonResponse(LipaNambaService.update_transaction(post, t_edit, request.user))
+        return JsonResponse(LipaNambaService.create_transaction(post, request.user))
+    return JsonResponse({'success': False, 'sms': 'Invalid request'})
 
 @never_cache
 @login_required
 def debts_actions(request: HttpRequest) -> JsonResponse:
-    """Handle Debts actions (add, update, delete)"""
     if request.method == 'POST':
-        try:
-            post_data = request.POST
-            debt_id = post_data.get('debt_id')
-            delete_id = post_data.get('delete_id')
-            
-            # Route to appropriate service method
-            if delete_id:
-                result = DebtsService.delete_debt(delete_id)
-            elif debt_id:
-                result = DebtsService.update_debt(post_data, debt_id, request.user)
-            else:
-                result = DebtsService.create_debt(post_data, request.user)
-            
-            return JsonResponse(result)
-            
-        except Exception as e:
-            logger.error(f"Error in debts_actions: {str(e)}")
-            return JsonResponse({'success': False, 'sms': 'Operation failed..!'})
-
-
-@never_cache
-@login_required
-def loans_page(request: HttpRequest) -> HttpResponse:
-    """Handle Loans page display and DataTables AJAX requests"""
-    if request.method == "POST":
-        try:
-            # Parse request parameters
-            params = DataTablesService.parse_request_params(request)
-            
-            # Base queryset
-            queryset = Loans.objects.filter(deleted=False)
-            if not request.user.is_admin:
-                queryset = queryset.filter(shop=request.user.shop)
-            
-            # Apply date filtering
-            queryset = DataTablesService.apply_date_filtering(
-                queryset, params['start_date_str'], params['end_date_str']
-            )
-            
-            # Prepare base data
-            base_data = LoansDataService.prepare_base_data(queryset)
-            total_records = len(base_data)
-            
-            # Apply sorting
-            base_data = DataTablesService.apply_sorting(
-                base_data, LoansDataService.COLUMN_MAPPING, 
-                params['order_column_index'], params['order_dir']
-            )
-            
-            # Apply column filtering
-            base_data = DataTablesService.apply_column_filtering(
-                base_data, request, LoansDataService.COLUMN_MAPPING, 
-                LoansDataService.COLUMN_FILTER_TYPES
-            )
-            
-            # Apply global search
-            base_data = DataTablesService.apply_global_search(base_data, params['search_value'])
-            
-            # Calculate filtered record count and grand totals
-            records_filtered = len(base_data)
-            grand_totals = LoansDataService.calculate_grand_totals(base_data)
-            
-            # Apply pagination
-            paginated_data = DataTablesService.paginate_data(
-                base_data, params['start'], params['length']
-            )
-            
-            # Calculate row count start
-            row_count_start = DataTablesService.calculate_row_count_start(
-                params['start'], params['length']
-            )
-            
-            # Format final data
-            final_data = LoansDataService.format_final_data(paginated_data, row_count_start)
-            
-            # Prepare AJAX response
-            ajax_response = {
-                'draw': params['draw'],
-                'recordsTotal': total_records,
-                'recordsFiltered': records_filtered,
-                'data': final_data,
-                'grand_totals': grand_totals
-            }
-            return JsonResponse(ajax_response)
-            
-        except Exception as e:
-            logger.error(f"Error in loans_page DataTables: {str(e)}")
-            return JsonResponse({
-                'draw': 0,
-                'recordsTotal': 0,
-                'recordsFiltered': 0,
-                'data': [],
-                'error': 'Failed to load data'
-            })
-    
-    return render(request, 'miamala/loans.html')
-
+        post = request.POST
+        d_edit, d_del = post.get('debt_edit'), post.get('debt_delete')
+        if d_del: return JsonResponse(DebtsService.delete_debt(d_del))
+        if d_edit: return JsonResponse(DebtsService.update_debt(post, d_edit, request.user))
+        return JsonResponse(DebtsService.create_debt(post, request.user))
+    return JsonResponse({'success': False, 'sms': 'Invalid request'})
 
 @never_cache
 @login_required
 def loans_actions(request: HttpRequest) -> JsonResponse:
-    """Handle Loans actions (add, update, delete)"""
     if request.method == 'POST':
-        try:
-            post_data = request.POST
-            loan_id = post_data.get('loan_id')
-            delete_id = post_data.get('delete_id')
-            
-            # Route to appropriate service method
-            if delete_id:
-                result = LoansService.delete_loan(delete_id)
-            elif loan_id:
-                result = LoansService.update_loan(post_data, loan_id, request.user)
-            else:
-                result = LoansService.create_loan(post_data, request.user)
-            
-            return JsonResponse(result)
-            
-        except Exception as e:
-            logger.error(f"Error in loans_actions: {str(e)}")
-            return JsonResponse({'success': False, 'sms': str(e)})
-        
-
-@never_cache
-@login_required
-def expenses_page(request: HttpRequest) -> HttpResponse:
-    """Handle Expenses page display and DataTables AJAX requests"""
-    if request.method == "POST":
-        try:
-            # Parse request parameters
-            params = DataTablesService.parse_request_params(request)
-            
-            # Base queryset with user restrictions
-            queryset = Expenses.objects.filter(deleted=False).order_by('-created_at')
-            if not request.user.is_admin:
-                queryset = queryset.filter(shop=request.user.shop)
-            
-            # Apply date filtering (using legacy method for expenses)
-            start_date = request.POST.get('start_date')
-            end_date = request.POST.get('end_date')
-            queryset = ExpensesDataService.apply_date_filtering_legacy(
-                queryset, start_date, end_date
-            )
-            
-            # Prepare base data
-            base_data = ExpensesDataService.prepare_base_data(queryset)
-            total_records = len(base_data)
-            
-            # Apply sorting
-            base_data = DataTablesService.apply_sorting(
-                base_data, ExpensesDataService.COLUMN_MAPPING, 
-                params['order_column_index'], params['order_dir']
-            )
-            
-            # Apply column filtering
-            base_data = DataTablesService.apply_column_filtering(
-                base_data, request, ExpensesDataService.COLUMN_MAPPING, 
-                ExpensesDataService.COLUMN_FILTER_TYPES
-            )
-            
-            # Apply global search
-            base_data = DataTablesService.apply_global_search(base_data, params['search_value'])
-            
-            # Calculate filtered record count and grand totals
-            records_filtered = len(base_data)
-            grand_totals = ExpensesDataService.calculate_grand_totals(base_data)
-            
-            # Apply pagination
-            paginated_data = DataTablesService.paginate_data(
-                base_data, params['start'], params['length']
-            )
-            
-            # Calculate row count start
-            row_count_start = DataTablesService.calculate_row_count_start(
-                params['start'], params['length']
-            )
-            
-            # Format final data
-            final_data = ExpensesDataService.format_final_data(paginated_data, row_count_start)
-            
-            # Prepare AJAX response
-            ajax_response = {
-                'draw': params['draw'],
-                'recordsTotal': total_records,
-                'recordsFiltered': records_filtered,
-                'data': final_data,
-                'grand_totals': grand_totals
-            }
-            return JsonResponse(ajax_response)
-            
-        except Exception as e:
-            logger.error(f"Error in expenses_page DataTables: {str(e)}")
-            return JsonResponse({
-                'draw': 0,
-                'recordsTotal': 0,
-                'recordsFiltered': 0,
-                'data': [],
-                'error': 'Failed to load data'
-            })
-    
-    return render(request, 'miamala/expenses.html', {'shops': Shop.objects.all().order_by('-created_at')})
-
+        post = request.POST
+        l_edit, l_del = post.get('loan_edit'), post.get('loan_delete')
+        if l_del: return JsonResponse(LoansService.delete_loan(l_del))
+        if l_edit: return JsonResponse(LoansService.update_loan(post, l_edit, request.user))
+        return JsonResponse(LoansService.create_loan(post, request.user))
+    return JsonResponse({'success': False, 'sms': 'Invalid request'})
 
 @never_cache
 @login_required
 def expenses_actions(request: HttpRequest) -> JsonResponse:
-    """Handle Expenses actions (add, update, delete, view)"""
     if request.method == 'POST':
-        try:
-            post_data = request.POST
-            expense_edit = post_data.get('expense_edit')
-            expense_delete = post_data.get('expense_delete')
-            expense_view = post_data.get('expense_view')
-            
-            # Route to appropriate service method
-            if expense_view:
-                result = ExpensesService.view_expense(expense_view)
-            elif expense_delete:
-                result = ExpensesService.delete_expense(expense_delete)
-            elif expense_edit:
-                result = ExpensesService.update_expense(post_data, expense_edit, request.user)
-            else:
-                result = ExpensesService.create_expense(post_data, request.user)
-            
-            return JsonResponse(result)
-            
-        except Exception as e:
-            logger.error(f"Error in expenses_actions: {str(e)}")
-            return JsonResponse({'success': False, 'sms': 'Operation failed..!'})
-    
-    return JsonResponse({'success': False, 'sms': 'Unknown error'})
-
-
-@never_cache
-@login_required
-def mauzo_page(request: HttpRequest) -> HttpResponse:
-    """Handle sales/mauzo page display and DataTables AJAX requests"""
-    if request.method == "POST":
-        try:
-            # Parse request parameters
-            params = DataTablesService.parse_request_params(request)
-            
-            # Base queryset with user restrictions
-            queryset = Mauzo.objects.filter(deleted=False).order_by('-created_at')
-            if not request.user.is_admin:
-                queryset = queryset.filter(shop=request.user.shop)
-            
-            # Apply date filtering (using legacy method for expenses)
-            start_date = request.POST.get('start_date')
-            end_date = request.POST.get('end_date')
-            queryset = MauzoDataService.apply_date_filtering_legacy(
-                queryset, start_date, end_date
-            )
-            
-            # Prepare base data
-            base_data = MauzoDataService.prepare_base_data(queryset)
-            total_records = len(base_data)
-            
-            # Apply sorting
-            base_data = DataTablesService.apply_sorting(
-                base_data, MauzoDataService.COLUMN_MAPPING, 
-                params['order_column_index'], params['order_dir']
-            )
-            
-            # Apply column filtering
-            base_data = DataTablesService.apply_column_filtering(
-                base_data, request, MauzoDataService.COLUMN_MAPPING, 
-                MauzoDataService.COLUMN_FILTER_TYPES
-            )
-            
-            # Apply global search
-            base_data = DataTablesService.apply_global_search(base_data, params['search_value'])
-            
-            # Calculate filtered record count and grand totals
-            records_filtered = len(base_data)
-            grand_totals = MauzoDataService.calculate_grand_totals(base_data)
-            
-            # Apply pagination
-            paginated_data = DataTablesService.paginate_data(
-                base_data, params['start'], params['length']
-            )
-            
-            # Calculate row count start
-            row_count_start = DataTablesService.calculate_row_count_start(
-                params['start'], params['length']
-            )
-            
-            # Format final data
-            final_data = MauzoDataService.format_final_data(paginated_data, row_count_start)
-            
-            # Prepare AJAX response
-            ajax_response = {
-                'draw': params['draw'],
-                'recordsTotal': total_records,
-                'recordsFiltered': records_filtered,
-                'data': final_data,
-                'grand_totals': grand_totals
-            }
-            return JsonResponse(ajax_response)
-            
-        except Exception as e:
-            logger.error(f"Error in mauzo_page DataTables: {str(e)}")
-            return JsonResponse({
-                'draw': 0,
-                'recordsTotal': 0,
-                'recordsFiltered': 0,
-                'data': [],
-                'error': 'Failed to load data'
-            })
-    
-    return render(request, 'miamala/mauzo.html', {'shops': Shop.objects.all().order_by('-created_at')})
-
+        post = request.POST
+        e_edit, e_del, e_view = post.get('expense_edit'), post.get('expense_delete'), post.get('expense_view')
+        if e_view: return JsonResponse(ExpensesService.view_expense(e_view))
+        if e_del: return JsonResponse(ExpensesService.delete_expense(e_del))
+        if e_edit: return JsonResponse(ExpensesService.update_expense(post, e_edit, request.user))
+        return JsonResponse(ExpensesService.create_expense(post, request.user))
+    return JsonResponse({'success': False, 'sms': 'Invalid request'})
 
 @never_cache
 @login_required
 def mauzo_actions(request: HttpRequest) -> JsonResponse:
-    """Handle sales/mauzo actions (add, update, delete, view)"""
     if request.method == 'POST':
-        try:
-            post_data = request.POST
-            mauzo_edit = post_data.get('mauzo_edit')
-            mauzo_delete = post_data.get('mauzo_delete')
-            mauzo_view = post_data.get('mauzo_view')
-            
-            # Route to appropriate service method
-            if mauzo_view:
-                result = MauzoService.view_mauzo(mauzo_view)
-            elif mauzo_delete:
-                result = MauzoService.delete_mauzo(mauzo_delete)
-            elif mauzo_edit:
-                result = MauzoService.update_mauzo(post_data, mauzo_edit, request.user)
-            else:
-                result = MauzoService.create_mauzo(post_data, request.user)
-            
-            return JsonResponse(result)
-            
-        except Exception as e:
-            logger.error(f"Error in mauzo_actions: {str(e)}")
-            return JsonResponse({'success': False, 'sms': 'Operation failed..!'})
-    
-    return JsonResponse({'success': False, 'sms': 'Unknown error'})
+        post = request.POST
+        m_edit, m_del, m_view = post.get('mauzo_edit'), post.get('mauzo_delete'), post.get('mauzo_view')
+        if m_view: return JsonResponse(MauzoService.view_mauzo(m_view))
+        if m_del: return JsonResponse(MauzoService.delete_mauzo(m_del))
+        if m_edit: return JsonResponse(MauzoService.update_mauzo(post, m_edit, request.user))
+        return JsonResponse(MauzoService.create_mauzo(post, request.user))
+    return JsonResponse({'success': False, 'sms': 'Invalid request'})

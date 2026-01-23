@@ -806,7 +806,7 @@ def user_profile_page(request: HttpRequest) -> HttpResponse:
                 
                 # Re-authenticate user after password change if successful
                 if result.get('success'):
-                    login(request, user, backend='frank_inventory.password_backend.CaseInsensitiveModelBackend')
+                    login(request, user, backend='miamala_frank.password_backend.CaseInsensitiveModelBackend')
             
             return JsonResponse(result)
             

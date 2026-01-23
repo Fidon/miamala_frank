@@ -53,8 +53,21 @@
           <h5 class="modal-title">Add new transaction</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body bg-background">
+        <div class="modal-body">
           <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <select name="shop" id="sel_shopname" class="form-select" required>
+              <option value="">Select shop</option>
+              {% if not request.user.is_admin %}
+                <option value="{{ request.user.shop.id }}" selected>{{ request.user.shop.abbrev }}</option>
+              {% else %}
+              {% for shop in shops %}
+                <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
+              {% endfor %}
+              {% endif %}
+            </select>
+            <label for="sel_shopname" class="form-label">Select shop</label>
+          </div>
           <div class="form-floating d-block w-100 float-start my-1">
             <input type="text" class="form-control" id="sel_names" placeholder="p" required />
             <label for="sel_names" class="form-label">Names</label>
@@ -113,6 +126,19 @@
         </div>
         <div class="modal-body">
           <div class="formsms alert w-100 float-start py-2 my-1"></div>
+          <div class="form-floating d-block w-100 float-start my-1">
+            <select name="shop" id="sel_edit_shopname" class="form-select" required>
+              <option value="">Select shop</option>
+              {% if not request.user.is_admin %}
+                <option value="{{ request.user.shop.id }}" selected>{{ request.user.shop.abbrev }}</option>
+              {% else %}
+              {% for shop in shops %}
+                <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
+              {% endfor %}
+              {% endif %}
+            </select>
+            <label for="sel_edit_shopname" class="form-label">Select shop</label>
+          </div>
           <div class="form-floating d-block w-100 float-start my-1">
             <input type="text" class="form-control" id="sel_edit_names" placeholder="p" required />
             <label for="sel_edit_names" class="form-label">Names</label>
