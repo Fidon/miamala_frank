@@ -419,6 +419,7 @@ def lipanamba(request: HttpRequest) -> HttpResponse:
             'total_amount': format_number(totals['t_amt'] or 0),
             'total_profit': format_number(totals['t_prof'] or 0)
         })
+    
     return render(request, 'miamala/lipanamba.html', {'shops': Shop.objects.all().order_by('names')})
 
 @never_cache

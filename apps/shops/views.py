@@ -156,13 +156,13 @@ class ShopManagementService:
             ).values('shop').annotate(
                 total_value=Sum('item_value')
             ).values('total_value')[:1]
-            
+
             shop_data = Shop.objects.filter(pk=shop_id).annotate(
-                users_count=Count('users', filter=Q(users__deleted=False, users__is_admin=False)),
-                items_count=Count('products', filter=Q(products__is_deleted=False)),
+                users_count=Count('users', filter=Q(users__deleted=False, users__is_admin=False), distinct=True),
+                items_count=Count('products', filter=Q(products__is_deleted=False), distinct=True),
                 networth=Coalesce(Subquery(net_worth_subquery), Value(0, output_field=DecimalField()))
             ).values('id', 'created_at', 'names', 'abbrev', 'comment', 'users_count', 'items_count', 'networth').first()
-            
+
             if not shop_data:
                 return None
             
@@ -824,11 +824,20 @@ class ShopDataTablesService:
     @staticmethod
     def handle_request(request: HttpRequest) -> JsonResponse:
         try:
+            net_worth_subquery = Product.objects.filter(
+                shop=OuterRef('pk'),
+                is_deleted=False
+            ).annotate(
+                item_value=F('qty') * F('price')
+            ).values('shop').annotate(
+                total_value=Sum('item_value')
+            ).values('total_value')[:1]
+
             queryset = Shop.objects.all().annotate(
-                users_count=Count('users', filter=Q(users__deleted=False, users__is_admin=False)),
-                items_count=Count('products', filter=Q(products__is_deleted=False)),
+                users_count=Count('users', filter=Q(users__deleted=False, users__is_admin=False), distinct=True),
+                items_count=Count('products', filter=Q(products__is_deleted=False), distinct=True),
                 networth=Coalesce(
-                    Sum(F('products__qty') * F('products__price'), filter=Q(products__is_deleted=False)),
+                    Subquery(net_worth_subquery),
                     Value(0, output_field=DecimalField())
                 )
             )

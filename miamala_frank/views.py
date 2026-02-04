@@ -2,7 +2,6 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 
-
 @never_cache
 def index_page(request):
     if request.user.is_authenticated:
