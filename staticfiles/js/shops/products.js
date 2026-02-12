@@ -70,16 +70,23 @@ class ProductsManager {
   /**
    * Generate alert messages
    */
-  generateAlert(isSuccess, message) {
+  generateAlert(isSuccess, message, messageDiv) {
     const alertType = isSuccess ? "success" : "danger";
     const iconType = isSuccess ? "check" : "exclamation";
-
-    return `
+    const actualMessage = `
       <div class="alert alert-${alertType} alert-dismissible fade show px-2 m-0 d-block w-100">
         <i class='fas fa-${iconType}-circle'></i> ${message}
         <button type="button" class="btn-close d-inline-block" data-bs-dismiss="alert"></button>
       </div>
     `;
+    messageDiv.html(actualMessage);
+    if (isSuccess) {
+      setTimeout(() => {
+        messageDiv.slideUp(400, () => {
+          messageDiv.html("").show();
+        });
+      }, 1000);
+    }
   }
 
   /**
@@ -134,13 +141,16 @@ class ProductsManager {
   handleFormSuccess(response) {
     this.setFormLoading(false);
 
-    const feedback = this.generateAlert(response.success, response.sms);
     this.scrollToTop(this.selectors.canvas);
-    $(`${this.selectors.form} .formsms`).html(feedback);
+    this.generateAlert(
+      response.success,
+      response.sms,
+      $(`${this.selectors.form} .formsms`),
+    );
 
     if (response.update_success) {
       $(this.selectors.productDiv).load(
-        `${location.href} ${this.selectors.productDiv}`
+        `${location.href} ${this.selectors.productDiv}`,
       );
       this.scrollToTop("html, body");
     } else if (response.success) {
@@ -155,9 +165,12 @@ class ProductsManager {
   handleFormError() {
     this.setFormLoading(false);
 
-    const feedback = this.generateAlert(false, "Unknown error, reload & try");
     this.scrollToTop(this.selectors.canvas);
-    $(`${this.selectors.form} .formsms`).html(feedback);
+    this.generateAlert(
+      false,
+      "Unknown error, reload & try",
+      $(`${this.selectors.form} .formsms`),
+    );
   }
 
   /**
@@ -351,6 +364,7 @@ class ProductsManager {
       className: "btn btn-extra text-white",
       title: "Shop items - FrankApp",
       exportOptions: { columns: this.config.columnIndices },
+      action: this.getExportAction(),
     };
 
     return [
@@ -400,6 +414,71 @@ class ProductsManager {
         ...baseConfig,
       },
     ];
+  }
+
+  /**
+   * Fetch all data for export
+   */
+  getExportAction() {
+    return function (e, dt, button, config) {
+      var self = this;
+      var oldStart = dt.settings()[0]._iDisplayStart;
+
+      dt.one("preXhr", function (e, s, data) {
+        data.start = 0;
+        data.length = -1;
+
+        dt.one("preDraw", function (e, settings) {
+          if (button[0].className.indexOf("buttons-copy") >= 0) {
+            $.fn.dataTable.ext.buttons.copyHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-excel") >= 0) {
+            $.fn.dataTable.ext.buttons.excelHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-pdf") >= 0) {
+            $.fn.dataTable.ext.buttons.pdfHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-print") >= 0) {
+            $.fn.dataTable.ext.buttons.print.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          }
+
+          // Restore original view
+          dt.one("preXhr", function (e, s, data) {
+            settings._iDisplayStart = oldStart;
+            data.start = oldStart;
+          });
+
+          setTimeout(function () {
+            dt.ajax.reload(null, false); // Reload without resetting to page 1
+          }, 0);
+
+          return false; // dont re-draw table
+        });
+      });
+
+      dt.ajax.reload(); // full-data fetch
+    };
   }
 
   /**
@@ -461,7 +540,7 @@ class ProductsManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
@@ -473,7 +552,7 @@ class ProductsManager {
           this.setupStatusFilter(cell, api, colIdx);
         } else {
           cell.html(
-            "<input type='text' class='text-charcoal' placeholder='Filter..'/>"
+            "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
           );
           this.setupColumnFilter(cell, api, colIdx);
         }
@@ -537,7 +616,7 @@ class ProductsManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
@@ -657,8 +736,11 @@ class ProductsManager {
       window.location.href = response.url;
     } else {
       this.setDeleteLoading(false);
-      const feedback = this.generateAlert(response.success, response.sms);
-      $(`${this.selectors.deleteModal} .formsms`).html(feedback);
+      this.generateAlert(
+        response.success,
+        response.sms,
+        $(`${this.selectors.deleteModal} .formsms`),
+      );
     }
   }
 
@@ -684,7 +766,7 @@ class ProductsManager {
     const formData = new FormData();
     formData.append(
       "block_product",
-      parseInt($(this.selectors.productId).val())
+      parseInt($(this.selectors.productId).val()),
     );
 
     $.ajax({
@@ -713,7 +795,7 @@ class ProductsManager {
 
     if (isLoading) {
       $(this.selectors.blockBtn).html(
-        "<i class='fas fa-spinner fa-pulse'></i>Updating"
+        "<i class='fas fa-spinner fa-pulse'></i>Updating",
       );
     }
   }
@@ -747,11 +829,11 @@ class ProductsManager {
             this.handleQtyUpdate();
           }
         } else {
-          const feedback = this.generateAlert(
+          this.generateAlert(
             false,
-            "New quantity should be 1 or more."
+            "New quantity should be 1 or more.",
+            $(`${this.selectors.qtyModal} .formsms`),
           );
-          $(`${this.selectors.qtyModal} .formsms`).html(feedback);
         }
       });
   }
@@ -803,7 +885,6 @@ class ProductsManager {
    */
   handleQtySuccess(response) {
     this.config.qtyUpdateState = false;
-    const feedback = this.generateAlert(response.success, response.sms);
 
     if (response.success) {
       const newQty = parseFloat($(this.selectors.itemNewQty).val());
@@ -814,12 +895,16 @@ class ProductsManager {
       $(this.selectors.itemNewQty).val("");
 
       $(this.selectors.productDiv).load(
-        `${location.href} ${this.selectors.productDiv}`
+        `${location.href} ${this.selectors.productDiv}`,
       );
     }
 
     this.setQtyLoading(false);
-    $(`${this.selectors.qtyModal} .formsms`).html(feedback);
+    this.generateAlert(
+      response.success,
+      response.sms,
+      $(`${this.selectors.qtyModal} .formsms`),
+    );
   }
 
   /**
@@ -828,7 +913,7 @@ class ProductsManager {
   setupTransferHandlers() {
     $(this.selectors.trfShopName).on("change", (e) => this.handleShopChange(e));
     $(this.selectors.transferForm).on("submit", (e) =>
-      this.handleTransferSubmit(e)
+      this.handleTransferSubmit(e),
     );
 
     $(this.selectors.trfReloadBtn).on("click", (e) => {
@@ -915,7 +1000,7 @@ class ProductsManager {
           $("<li>", {
             class: "searchable-dropdown-item disabled",
             text: "No results found",
-          })
+          }),
         );
       }
     };
@@ -946,7 +1031,7 @@ class ProductsManager {
         // Update selected state
         $dropdownList.find(".searchable-dropdown-item").removeClass("selected");
         $(this).addClass("selected");
-      }
+      },
     );
 
     // Hide dropdown when clicking outside
@@ -1044,7 +1129,7 @@ class ProductsManager {
         .sort((a, b) => a.name.localeCompare(b.name))
         .forEach((product) => {
           productNameSelect.append(
-            `<option value="${product.id}">${product.name}</option>`
+            `<option value="${product.id}">${product.name}</option>`,
           );
         });
 
@@ -1052,7 +1137,7 @@ class ProductsManager {
       this.initSearchableDropdown();
     } else {
       productNameSelect.append(
-        `<option value="">No products available</option>`
+        `<option value="">No products available</option>`,
       );
     }
   }
@@ -1084,13 +1169,15 @@ class ProductsManager {
    * Handle successful product transfer
    */
   handleTransferSuccess(response) {
-    // Use the existing generateAlert function
-    const fdback = this.generateAlert(response.success, response.sms);
     $(`${this.selectors.transferCanvas} .offcanvas-body`).animate(
       { scrollTop: 0 },
-      "slow"
+      "slow",
     );
-    $(`${this.selectors.transferForm} .formsms`).html(fdback);
+    this.generateAlert(
+      response.success,
+      response.sms,
+      $(`${this.selectors.transferForm} .formsms`),
+    );
 
     if (response.success) {
       $(this.selectors.trfSubmitBtn)
@@ -1117,13 +1204,15 @@ class ProductsManager {
    */
   handleTransferError() {
     this.setTransferLoading(false, "Transfer");
-    // Use the existing generateAlert function
-    const fdback = this.generateAlert(false, "Unknown error, reload & try");
     $(`${this.selectors.transferCanvas} .offcanvas-body`).animate(
       { scrollTop: 0 },
-      "slow"
+      "slow",
     );
-    $(`${this.selectors.transferForm} .formsms`).html(fdback);
+    this.generateAlert(
+      false,
+      "Unknown error, reload & try",
+      $(`${this.selectors.transferForm} .formsms`),
+    );
   }
 
   /**

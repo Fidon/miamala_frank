@@ -63,16 +63,23 @@ class CripsManager {
   /**
    * Generate alert messages
    */
-  generateAlert(isSuccess, message) {
+  generateAlert(isSuccess, message, messageDiv) {
     const alertType = isSuccess ? "success" : "danger";
     const iconType = isSuccess ? "check" : "exclamation";
-
-    return `
+    const actualMessage = `
       <div class="alert alert-${alertType} alert-dismissible fade show px-2 m-0 d-block w-100">
         <i class='fas fa-${iconType}-circle'></i> ${message}
         <button type="button" class="btn-close d-inline-block" data-bs-dismiss="alert"></button>
       </div>
     `;
+    messageDiv.html(actualMessage);
+    if (isSuccess) {
+      setTimeout(() => {
+        messageDiv.slideUp(400, () => {
+          messageDiv.html("").show();
+        });
+      }, 1000);
+    }
   }
 
   /**
@@ -127,9 +134,12 @@ class CripsManager {
   handleFormSuccess(response) {
     this.setFormLoading(false);
 
-    const feedback = this.generateAlert(response.success, response.sms);
     this.scrollToTop(this.selectors.canvas);
-    $(`${this.selectors.form} .formsms`).html(feedback);
+    this.generateAlert(
+      response.success,
+      response.sms,
+      $(`${this.selectors.form} .formsms`),
+    );
 
     if (response.update_success) {
       $(this.selectors.cripsDiv).load(
@@ -148,9 +158,12 @@ class CripsManager {
   handleFormError() {
     this.setFormLoading(false);
 
-    const feedback = this.generateAlert(false, "Unknown error, reload & try");
     this.scrollToTop(this.selectors.canvas);
-    $(`${this.selectors.form} .formsms`).html(feedback);
+    this.generateAlert(
+      false,
+      "Unknown error, reload & try",
+      $(`${this.selectors.form} .formsms`),
+    );
   }
 
   /**
@@ -334,6 +347,7 @@ class CripsManager {
       className: "btn btn-extra text-white",
       title: "Crips - FrankApp",
       exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6] },
+      action: this.getExportAction(),
     };
 
     return [
@@ -383,6 +397,71 @@ class CripsManager {
         ...baseConfig,
       },
     ];
+  }
+
+  /**
+   * Fetch all data for export
+   */
+  getExportAction() {
+    return function (e, dt, button, config) {
+      var self = this;
+      var oldStart = dt.settings()[0]._iDisplayStart;
+
+      dt.one("preXhr", function (e, s, data) {
+        data.start = 0;
+        data.length = -1;
+
+        dt.one("preDraw", function (e, settings) {
+          if (button[0].className.indexOf("buttons-copy") >= 0) {
+            $.fn.dataTable.ext.buttons.copyHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-excel") >= 0) {
+            $.fn.dataTable.ext.buttons.excelHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-pdf") >= 0) {
+            $.fn.dataTable.ext.buttons.pdfHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-print") >= 0) {
+            $.fn.dataTable.ext.buttons.print.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          }
+
+          // Restore original view
+          dt.one("preXhr", function (e, s, data) {
+            settings._iDisplayStart = oldStart;
+            data.start = oldStart;
+          });
+
+          setTimeout(function () {
+            dt.ajax.reload(null, false); // Reload without resetting to page 1
+          }, 0);
+
+          return false; // dont re-draw table
+        });
+      });
+
+      dt.ajax.reload(); // full-data fetch
+    };
   }
 
   /**
@@ -628,8 +707,11 @@ class CripsManager {
       window.location.href = response.url;
     } else {
       this.setDeleteLoading(false);
-      const feedback = this.generateAlert(response.success, response.sms);
-      $(`${this.selectors.deleteModal} .formsms`).html(feedback);
+      this.generateAlert(
+        response.success,
+        response.sms,
+        $(`${this.selectors.deleteModal} .formsms`),
+      );
     }
   }
 }

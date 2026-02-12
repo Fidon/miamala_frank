@@ -223,6 +223,7 @@ class ItemsReportManager {
       className: "btn btn-extra text-white",
       title: "Sales-items-report - FrankApp",
       exportOptions: { columns: this.config.columnIndices },
+      action: this.getExportAction(),
     };
 
     return [
@@ -272,6 +273,71 @@ class ItemsReportManager {
         ...baseConfig,
       },
     ];
+  }
+
+  /**
+   * Fetch all data for export
+   */
+  getExportAction() {
+    return function (e, dt, button, config) {
+      var self = this;
+      var oldStart = dt.settings()[0]._iDisplayStart;
+
+      dt.one("preXhr", function (e, s, data) {
+        data.start = 0;
+        data.length = -1;
+
+        dt.one("preDraw", function (e, settings) {
+          if (button[0].className.indexOf("buttons-copy") >= 0) {
+            $.fn.dataTable.ext.buttons.copyHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-excel") >= 0) {
+            $.fn.dataTable.ext.buttons.excelHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-pdf") >= 0) {
+            $.fn.dataTable.ext.buttons.pdfHtml5.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          } else if (button[0].className.indexOf("buttons-print") >= 0) {
+            $.fn.dataTable.ext.buttons.print.action.call(
+              self,
+              e,
+              dt,
+              button,
+              config,
+            );
+          }
+
+          // Restore original view
+          dt.one("preXhr", function (e, s, data) {
+            settings._iDisplayStart = oldStart;
+            data.start = oldStart;
+          });
+
+          setTimeout(function () {
+            dt.ajax.reload(null, false); // Reload without resetting to page 1
+          }, 0);
+
+          return false; // dont re-draw table
+        });
+      });
+
+      dt.ajax.reload(); // full-data fetch
+    };
   }
 
   /**
@@ -331,8 +397,8 @@ class ItemsReportManager {
         typeof i === "string"
           ? i.replace(/[\s,]/g, "").replace(/TZS/g, "") * 1
           : typeof i === "number"
-          ? i
-          : 0;
+            ? i
+            : 0;
 
       const salesTotal = api
         .column(6)
@@ -367,7 +433,7 @@ class ItemsReportManager {
       .eq(0)
       .each((colIdx) => {
         const cell = $(".filters th").eq(
-          $(api.column(colIdx).header()).index()
+          $(api.column(colIdx).header()).index(),
         );
         cell.addClass("bg-white");
 
@@ -389,16 +455,16 @@ class ItemsReportManager {
             .find("option")
             .each((_, opt) => {
               select.innerHTML += `<option value="${$(opt).text()}">${$(
-                opt
+                opt,
               ).text()}</option>`;
             });
           cell.html(select);
           $(select).on("change", () =>
-            api.column(colIdx).search($(select).val()).draw()
+            api.column(colIdx).search($(select).val()).draw(),
           );
         } else {
           cell.html(
-            "<input type='text' class='text-color6' placeholder='Filter..'/>"
+            "<input type='text' class='text-color6' placeholder='Filter..'/>",
           );
           this.setupColumnFilter(cell, api, colIdx);
         }
@@ -423,7 +489,7 @@ class ItemsReportManager {
         .search(
           this.value !== "" ? regexr.replace("{search}", this.value) : "",
           this.value !== "",
-          this.value === ""
+          this.value === "",
         )
         .draw();
 
