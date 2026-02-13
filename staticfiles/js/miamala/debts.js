@@ -27,6 +27,7 @@ class DebtsManager {
       debtNames: "#debt_names",
       debtAmount: "#debt_amount",
       debtShopname: "#debt_shopname",
+      debtUser: "#debt_users",
       debtDescription: "#debt_description",
       debtEditNames: "#debt_edit_names",
       debtEditAmount: "#debt_edit_amount",
@@ -43,6 +44,8 @@ class DebtsManager {
     };
 
     this.table = null;
+    this.shopOptions = null;
+    this.userOptions = null;
     this.init();
   }
 
@@ -59,6 +62,8 @@ class DebtsManager {
    */
   init() {
     $(this.selectors.transactionsToggle).click();
+    this.shopOptions = $(`${this.selectors.debtShopname} option`);
+    this.userOptions = $(`${this.selectors.debtUser} option`);
     this.setupTable();
     this.setupEventHandlers();
   }
@@ -382,6 +387,7 @@ class DebtsManager {
       $(this.selectors.minDebtDate).val("");
       $(this.selectors.maxDebtDate).val("");
       $('.filters input[type="text"]').val("");
+      $(".filters select").val("");
       this.table.search("").columns().search("").draw();
     });
   }
@@ -543,6 +549,10 @@ class DebtsManager {
           const calendar = `<button type="button" class="btn btn-primary text-white" data-bs-toggle="modal" data-bs-target="#dateFilterModal"><i class="fas fa-calendar-alt"></i></button>`;
           cell.html(calendar);
           cell.addClass("text-center");
+        } else if (colIdx === 6) {
+          this.setupShopFilter(cell, api, colIdx);
+        } else if (colIdx === 7) {
+          this.setupUserFilter(cell, api, colIdx);
         } else {
           $(cell).html(
             "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
@@ -551,6 +561,45 @@ class DebtsManager {
           this.setupColumnFilter(cell, api, colIdx);
         }
       });
+  }
+
+  /**
+   * Setup user filter dropdown
+   */
+  setupUserFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.userOptions.each((index, option) => {
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
+  }
+
+  /**
+   * Setup shop filter dropdown
+   */
+  setupShopFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.shopOptions.each((index, option) => {
+      if (index === 0) return;
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
   }
 
   /**

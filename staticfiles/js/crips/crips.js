@@ -25,9 +25,11 @@ class CripsManager {
       cripsListUrl: "#crips_list_url",
       cripsId: "#get_crips_id",
       deleteModal: "#confirm_delete_modal",
+      cripsUsers: "#crips_users",
     };
 
     this.table = null;
+    this.userOptions = null;
     this.init();
   }
 
@@ -43,6 +45,7 @@ class CripsManager {
    * Initialize the application
    */
   init() {
+    this.userOptions = $(`${this.selectors.cripsUsers} option`);
     this.setupFormHandler();
     this.setupTable();
     this.setupEventHandlers();
@@ -563,6 +566,8 @@ class CripsManager {
           </button>
         `;
           cell.html(calendar);
+        } else if (colIdx === 6) {
+          this.setupUserFilter(cell, api, colIdx);
         } else {
           cell.html(
             "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
@@ -570,6 +575,25 @@ class CripsManager {
           this.setupColumnFilter(cell, api, colIdx);
         }
       });
+  }
+
+  /**
+   * Setup user filter dropdown
+   */
+  setupUserFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.userOptions.each((index, option) => {
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
   }
 
   /**
@@ -629,6 +653,7 @@ class CripsManager {
         $(this.selectors.searchInput).val("");
         this.clearDates();
         $('.filters input[type="text"]').val("");
+        $(".filters select").val("");
         this.table.search("").columns().search("").draw();
       });
 

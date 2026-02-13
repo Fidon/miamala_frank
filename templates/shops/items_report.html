@@ -83,10 +83,23 @@
 
   <input type="hidden" value="{% url 'sale_items_report' %}" id="sale_items_report" />
   
-  <select class="d-none" id="shops_list">
-    {% for shop in shops %}
-        <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
-    {% endfor %}
+  <select id="shops_list" class="d-none">
+    {% if not request.user.is_admin %}
+      <option value="{{ request.user.shop.abbrev }}">{{ request.user.shop.abbrev }}</option>
+    {% else %}
+      {% for shop in shops %}
+        <option value="{{ shop.abbrev }}">{{ shop.abbrev }}</option>
+      {% endfor %}
+    {% endif %}
+  </select>
+  <select id="saleitems_users" class="d-none">
+    {% if not request.user.is_admin %}
+      <option value="{{ request.user.username }}">{{ request.user.username }}</option>
+    {% else %}
+      {% for user in users %}
+        <option value="{{ user.username }}">{{ user.username }}</option>
+      {% endfor %}
+    {% endif %}
   </select>
 {% endblock %}
 {% block scripts %}

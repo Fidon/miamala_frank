@@ -185,6 +185,15 @@
   </div>
   
   <input type="hidden" id="selcom_pay_page" value="{% url 'selcompay_page' %}">
+  <select id="selcom_users" class="d-none">
+    {% if not request.user.is_admin %}
+      <option value="{{ request.user.username }}">{{ request.user.username }}</option>
+    {% else %}
+      {% for user in users %}
+        <option value="{{ user.username }}">{{ user.username }}</option>
+      {% endfor %}
+    {% endif %}
+  </select>
 {% endblock %}
 {% block scripts %}
   <script src="{% static 'datatables/datatables.min.js' %}"></script>

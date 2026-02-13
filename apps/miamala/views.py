@@ -1,39 +1,19 @@
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
 from django.contrib.auth.decorators import login_required
-from dateutil.parser import parse
 from django.http import JsonResponse, HttpRequest, HttpResponse
-from django.db.models import QuerySet, Q, Sum, F
-from django.db.models.functions import Lower
+from django.db.models import Sum, F
 from decimal import Decimal
 
 from .models import Selcompay, Lipanamba, Debts, Loans, Expenses, Mauzo
+from apps.users.models import CustomUser
 from apps.shops.models import Shop
-from utils.util_functions import conv_timezone, format_number, selcom_profit, lipa_profit
+from utils.util_functions import conv_timezone, format_number, selcom_profit, lipa_profit, DataTableProcessor
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-# --- DATABASE UTILITIES ---
-
-def get_numeric_filter(field_name: str, search_value: str) -> Optional[Q]:
-    """
-    Translates filter_items() logic to Database Q objects for performance.
-    Logic: '-100' (<=100), '100-' (>=100), '100' (==100)
-    """
-    try:
-        search_value = search_value.replace(',', '').strip()
-        if search_value.startswith('-') and search_value[1:].replace('.', '', 1).isdigit():
-            return Q(**{f"{field_name}__lte": float(search_value[1:])})
-        elif search_value.endswith('-') and search_value[:-1].replace('.', '', 1).isdigit():
-            return Q(**{f"{field_name}__gte": float(search_value[:-1])})
-        elif search_value.replace('.', '', 1).isdigit():
-            return Q(**{field_name: float(search_value)})
-    except (ValueError, TypeError):
-        pass
-    return None
 
 class BaseService:
     """Base class for common CRUD operations with performance optimizations"""
@@ -43,7 +23,6 @@ class BaseService:
         return Shop.objects.get(id=shop_id)
 
 # --- TRANSACTION SERVICES ---
-
 class SelcomPayService(BaseService):
     @staticmethod
     def create_transaction(post_data: Dict[str, Any], user) -> Dict[str, Any]:
@@ -273,88 +252,7 @@ class MauzoService(BaseService):
             }
         except Exception: return {'success': False, 'sms': 'Sales not found.'}
 
-# --- DATATABLES ENGINE (OPTIMIZED) ---
-
-class DataTablesEngine:
-    """Core engine to handle DB-level DataTables operations with correct record counting"""
-    
-    @staticmethod
-    def handle_request(request: HttpRequest, queryset: QuerySet, 
-                       search_fields: List[str], 
-                       column_map: Dict[int, str],
-                       numeric_fields: List[str] = None) -> Dict[str, Any]:
-        
-        # 1. Base Count (Unfiltered)
-        records_total = queryset.count()
-        
-        # 2. Extract DataTables parameters
-        draw = int(request.POST.get('draw', 1))
-        start = int(request.POST.get('start', 0))
-        length = int(request.POST.get('length', 10))
-        search_val = request.POST.get('search[value]', '').strip()
-        
-        # 3. Date Filtering (DB Level)
-        start_date = request.POST.get('startdate')
-        end_date = request.POST.get('enddate')
-        date_field = 'dates' if 'dates' in [f.name for f in queryset.model._meta.fields] else 'created_at'
-        
-        if start_date:
-            try: queryset = queryset.filter(**{f"{date_field}__gte": parse(start_date)})
-            except: pass
-        if end_date:
-            try: queryset = queryset.filter(**{f"{date_field}__lte": parse(end_date)})
-            except: pass
-
-        # 4. Global Search (DB Level)
-        if search_val:
-            q_obj = Q()
-            for field in search_fields:
-                q_obj |= Q(**{f"{field}__icontains": search_val})
-            queryset = queryset.filter(q_obj)
-
-        # 5. Individual Column Search (Replacing filter_items loop)
-        for i in range(len(column_map)):
-            col_search = request.POST.get(f'columns[{i}][search][value]', '').strip()
-            if col_search:
-                field = column_map.get(i)
-                if numeric_fields and field in numeric_fields:
-                    num_q = get_numeric_filter(field, col_search)
-                    if num_q: queryset = queryset.filter(num_q)
-                else:
-                    queryset = queryset.filter(**{f"{field}__icontains": col_search})
-
-        # 6. Filtered Count (Before slicing)
-        records_filtered = queryset.count()
-
-        # 7. Sorting (DB Level)
-        order_idx = int(request.POST.get('order[0][column]', 1))
-        order_dir = request.POST.get('order[0][dir]', 'desc')
-        sort_field = column_map.get(order_idx, date_field)
-        if (numeric_fields and sort_field in numeric_fields) or sort_field == date_field:
-            ordering = sort_field
-            if order_dir == 'desc':
-                ordering = f"-{sort_field}"
-            queryset = queryset.order_by(ordering)
-        else:
-            sort_expression = Lower(sort_field)
-            if order_dir == 'desc':
-                queryset = queryset.order_by(sort_expression.desc())
-            else:
-                queryset = queryset.order_by(sort_expression.asc())
-
-        # 8. Pagination
-        paged_data = queryset[start:start+length] if length > 0 else queryset
-        
-        return {
-            'draw': draw,
-            'recordsTotal': records_total,
-            'recordsFiltered': records_filtered,
-            'data': paged_data,
-            'full_queryset': queryset # For totals/aggregates
-        }
-
 # --- VIEW FUNCTIONS ---
-
 @never_cache
 @login_required
 def selcompay (request: HttpRequest) -> HttpResponse:
@@ -362,34 +260,65 @@ def selcompay (request: HttpRequest) -> HttpResponse:
         qs = Selcompay.objects.filter(deleted=False).select_related('user', 'shop')
         if not request.user.is_admin:
             qs = qs.filter(shop=request.user.shop)
-        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'profit', 5: 'shop__abbrev'}
-        
-        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'profit'])
-        
-        # Grand Totals (DB level)
-        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_prof=Sum('profit'))
-        
-        final_data = []
-        for i, item in enumerate(dt['data']):
-            final_data.append({
-                'count': int(request.POST.get('start', 0)) + i + 1,
-                'id': item.id,
-                'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
-                'names': item.name, 'shop': item.shop.abbrev,
-                'user': item.user.username, 'amount': format_number(item.amount),
-                'profit': format_number(item.profit), 'describe': item.description or "",
-                'action': ""
-            })
 
-        return JsonResponse({
-            'draw': dt['draw'],
-            'recordsTotal': dt['recordsTotal'],
-            'recordsFiltered': dt['recordsFiltered'],
-            'data': final_data,
-            'total_amount': format_number(totals['t_amt'] or 0),
-            'total_profit': format_number(totals['t_prof'] or 0)
-        })
-    return render(request, 'miamala/selcom.html', {'shops': Shop.objects.all().order_by('names')})
+        column_filter_fields = {
+            1: "created_at",
+            2: "name",
+            3: "amount",
+            4: "profit",
+            5: "shop__abbrev",
+            6: "user__username",
+        }
+        column_sort_fields = column_filter_fields.copy()
+        column_filter_types = {
+            "name": "contains",
+            "amount": "numeric",
+            "profit": "numeric",
+            "user__username": "exact",
+            "shop__abbrev": "exact",
+        }
+        global_search = [
+            "name", "amount", "profit", "user__username",
+            "user__fullname", "shop__abbrev", "shop__names"
+            ]
+
+        result = DataTableProcessor.process_request(
+            request=request,
+            queryset=qs,
+            global_search_fields=global_search,
+            column_filter_fields=column_filter_fields,
+            column_filter_types=column_filter_types,
+            column_sort_fields=column_sort_fields,
+            date_field='created_at',
+        )
+
+        totals = result['full_queryset'].aggregate(t_amt=Sum('amount'), t_prof=Sum('profit'))
+
+        start_idx = int(request.POST.get("start", 0))
+
+        final_data = [{
+            "count": start_idx + i + 1,
+            'id': item.id,
+            'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
+            'names': item.name, 'shop': item.shop.abbrev,
+            'user': item.user.username, 'amount': format_number(item.amount),
+            'profit': format_number(item.profit), 'describe': item.description or "",
+            'action': ""
+        } for i, item in enumerate(result['data'])]
+        
+        return JsonResponse(
+            {
+                'draw': result['draw'],
+                'recordsTotal': result['recordsTotal'],
+                'recordsFiltered': result['recordsFiltered'],
+                'data': final_data,
+                'total_amount': format_number(totals['t_amt'] or 0),
+                'total_profit': format_number(totals['t_prof'] or 0)
+            }
+        )
+    shops = Shop.objects.all().order_by('names')
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'miamala/selcom.html', {'shops': shops, 'users': users})
 
 @never_cache
 @login_required
@@ -398,29 +327,63 @@ def lipanamba(request: HttpRequest) -> HttpResponse:
         qs = Lipanamba.objects.filter(deleted=False).select_related('user', 'shop')
         if not request.user.is_admin:
             qs = qs.filter(shop=request.user.shop)
-        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'profit', 5: 'shop__abbrev'}
         
-        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'profit'])
-        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_prof=Sum('profit'))
-        
+        column_filter_fields = {
+            1: "created_at",
+            2: "name",
+            3: "amount",
+            4: "profit",
+            5: "shop__abbrev",
+            6: "user__username",
+        }
+        column_sort_fields = column_filter_fields.copy()
+        column_filter_types = {
+            "name": "contains",
+            "amount": "numeric",
+            "profit": "numeric",
+            "user__username": "exact",
+            "shop__abbrev": "exact",
+        }
+        global_search = [
+            "name", "amount", "profit", "user__username",
+            "user__fullname", "shop__abbrev", "shop__names"
+            ]
+
+        result = DataTableProcessor.process_request(
+            request=request,
+            queryset=qs,
+            global_search_fields=global_search,
+            column_filter_fields=column_filter_fields,
+            column_filter_types=column_filter_types,
+            column_sort_fields=column_sort_fields,
+            date_field='created_at',
+        )
+
+        totals = result['full_queryset'].aggregate(t_amt=Sum('amount'), t_prof=Sum('profit'))
+
+        start_idx = int(request.POST.get("start", 0))
+
         final_data = [{
-            'count': int(request.POST.get('start', 0)) + i + 1,
+            "count": start_idx + i + 1,
             'id': item.id, 'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
             'names': item.name, 'shop': item.shop.abbrev, 'user': item.user.username,
             'amount': format_number(item.amount), 'profit': format_number(item.profit),
             'describe': item.description or "", 'action': ""
-        } for i, item in enumerate(dt['data'])]
-
-        return JsonResponse({
-            'draw': dt['draw'],
-            'recordsTotal': dt['recordsTotal'],
-            'recordsFiltered': dt['recordsFiltered'],
-            'data': final_data,
-            'total_amount': format_number(totals['t_amt'] or 0),
-            'total_profit': format_number(totals['t_prof'] or 0)
-        })
-    
-    return render(request, 'miamala/lipanamba.html', {'shops': Shop.objects.all().order_by('names')})
+        } for i, item in enumerate(result['data'])]
+        
+        return JsonResponse(
+            {
+                'draw': result['draw'],
+                'recordsTotal': result['recordsTotal'],
+                'recordsFiltered': result['recordsFiltered'],
+                'data': final_data,
+                'total_amount': format_number(totals['t_amt'] or 0),
+                'total_profit': format_number(totals['t_prof'] or 0)
+            }
+        )
+    shops = Shop.objects.all().order_by('names')
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'miamala/lipanamba.html', {'shops': shops, 'users': users})
 
 @never_cache
 @login_required
@@ -429,29 +392,66 @@ def debts(request: HttpRequest) -> HttpResponse:
         qs = Debts.objects.filter(deleted=False).select_related('user', 'shop').annotate(balance=F('amount')-F('paid'))
         if not request.user.is_admin:
             qs = qs.filter(shop=request.user.shop)
-        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'paid', 5: 'balance', 6: 'shop__abbrev'}
         
-        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'paid', 'balance'])
-        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_paid=Sum('paid'), t_bal=Sum(F('amount')-F('paid')))
-        
+        column_filter_fields = {
+            1: "created_at",
+            2: "name",
+            3: "amount",
+            4: "paid",
+            5: "balance",
+            6: "shop__abbrev",
+            7: "user__username",
+        }
+        column_sort_fields = column_filter_fields.copy()
+        column_filter_types = {
+            "name": "contains",
+            "amount": "numeric",
+            "paid": "numeric",
+            "balance": "numeric",
+            "user__username": "exact",
+            "shop__abbrev": "exact",
+        }
+        global_search = [
+            "name", "amount", "paid", "balance", "user__username",
+            "user__fullname", "shop__abbrev", "shop__names"
+            ]
+
+        result = DataTableProcessor.process_request(
+            request=request,
+            queryset=qs,
+            global_search_fields=global_search,
+            column_filter_fields=column_filter_fields,
+            column_filter_types=column_filter_types,
+            column_sort_fields=column_sort_fields,
+            date_field='created_at',
+        )
+
+        totals = result['full_queryset'].aggregate(t_amt=Sum('amount'), t_paid=Sum('paid'), t_bal=Sum(F('amount')-F('paid')))
+
+        start_idx = int(request.POST.get("start", 0))
+
         final_data = [{
-            'count': int(request.POST.get('start', 0)) + i + 1,
+            'count': start_idx + i + 1,
             'id': item.id, 'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
             'names': item.name, 'amount': format_number(item.amount),
-            'paid': format_number(item.paid), 'balance': format_number(item.amount - item.paid),
+            'paid': format_number(item.paid), 'balance': format_number(item.balance),
             'describe': item.description or "", 'shop': item.shop.abbrev, 'user': item.user.username, 'action': ""
-        } for i, item in enumerate(dt['data'])]
-
-        return JsonResponse({
-            'draw': dt['draw'],
-            'recordsTotal': dt['recordsTotal'],
-            'recordsFiltered': dt['recordsFiltered'],
-            'data': final_data,
-            'total_amount': format_number(totals['t_amt'] or 0),
-            'total_paid': format_number(totals['t_paid'] or 0),
-            'total_balance': format_number(totals['t_bal'] or 0)
-        })
-    return render(request, 'miamala/debts.html', {'shops': Shop.objects.all().order_by('names')})
+        } for i, item in enumerate(result['data'])]
+        
+        return JsonResponse(
+            {
+                'draw': result['draw'],
+                'recordsTotal': result['recordsTotal'],
+                'recordsFiltered': result['recordsFiltered'],
+                'data': final_data,
+                'total_amount': format_number(totals['t_amt'] or 0),
+                'total_paid': format_number(totals['t_paid'] or 0),
+                'total_balance': format_number(totals['t_bal'] or 0)
+            }
+        )
+    shops = Shop.objects.all().order_by('names')
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'miamala/debts.html', {'shops': shops, 'users': users})
 
 @never_cache
 @login_required
@@ -460,29 +460,66 @@ def loans(request: HttpRequest) -> HttpResponse:
         qs = Loans.objects.filter(deleted=False).select_related('user', 'shop').annotate(balance=F('amount')-F('paid'))
         if not request.user.is_admin:
             qs = qs.filter(shop=request.user.shop)
-        cols = {1: 'created_at', 2: 'name', 3: 'amount', 4: 'paid', 5: 'balance', 6: 'shop__abbrev'}
         
-        dt = DataTablesEngine.handle_request(request, qs, ['name', 'description'], cols, ['amount', 'paid', 'balance'])
-        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'), t_paid=Sum('paid'), t_bal=Sum(F('amount')-F('paid')))
-        
+        column_filter_fields = {
+            1: "created_at",
+            2: "name",
+            3: "amount",
+            4: "paid",
+            5: "balance",
+            6: "shop__abbrev",
+            7: "user__username",
+        }
+        column_sort_fields = column_filter_fields.copy()
+        column_filter_types = {
+            "name": "contains",
+            "amount": "numeric",
+            "paid": "numeric",
+            "balance": "numeric",
+            "user__username": "exact",
+            "shop__abbrev": "exact",
+        }
+        global_search = [
+            "name", "amount", "paid", "balance", "user__username",
+            "user__fullname", "shop__abbrev", "shop__names"
+            ]
+
+        result = DataTableProcessor.process_request(
+            request=request,
+            queryset=qs,
+            global_search_fields=global_search,
+            column_filter_fields=column_filter_fields,
+            column_filter_types=column_filter_types,
+            column_sort_fields=column_sort_fields,
+            date_field='created_at',
+        )
+
+        totals = result['full_queryset'].aggregate(t_amt=Sum('amount'), t_paid=Sum('paid'), t_bal=Sum(F('amount')-F('paid')))
+
+        start_idx = int(request.POST.get("start", 0))
+
         final_data = [{
-            'count': int(request.POST.get('start', 0)) + i + 1,
+            'count': start_idx + i + 1,
             'id': item.id, 'dates': conv_timezone(item.created_at, '%d-%b-%Y %H:%M'),
             'names': item.name, 'amount': format_number(item.amount),
-            'paid': format_number(item.paid), 'balance': format_number(item.amount - item.paid),
+            'paid': format_number(item.paid), 'balance': format_number(item.balance),
             'describe': item.description or "", 'shop': item.shop.abbrev, 'user': item.user.username, 'action': ""
-        } for i, item in enumerate(dt['data'])]
-
-        return JsonResponse({
-            'draw': dt['draw'],
-            'recordsTotal': dt['recordsTotal'],
-            'recordsFiltered': dt['recordsFiltered'],
-            'data': final_data,
-            'total_amount': format_number(totals['t_amt'] or 0),
-            'total_paid': format_number(totals['t_paid'] or 0),
-            'total_balance': format_number(totals['t_bal'] or 0)
-        })
-    return render(request, 'miamala/loans.html', {'shops': Shop.objects.all().order_by('names')})
+        } for i, item in enumerate(result['data'])]
+        
+        return JsonResponse(
+            {
+                'draw': result['draw'],
+                'recordsTotal': result['recordsTotal'],
+                'recordsFiltered': result['recordsFiltered'],
+                'data': final_data,
+                'total_amount': format_number(totals['t_amt'] or 0),
+                'total_paid': format_number(totals['t_paid'] or 0),
+                'total_balance': format_number(totals['t_bal'] or 0)
+            }
+        )
+    shops = Shop.objects.all().order_by('names')
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'miamala/loans.html', {'shops': shops, 'users': users})
 
 @never_cache
 @login_required
@@ -491,24 +528,56 @@ def expenses(request: HttpRequest) -> HttpResponse:
         qs = Expenses.objects.filter(deleted=False).select_related('user', 'shop')
         if not request.user.is_admin:
             qs = qs.filter(shop=request.user.shop)
-        cols = {1: 'dates', 2: 'title', 3: 'amount', 4: 'shop__abbrev'}
         
-        dt = DataTablesEngine.handle_request(request, qs, ['title', 'description'], cols, ['amount'])
-        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'))
-        
+        column_filter_fields = {
+            1: "dates",
+            2: "title",
+            3: "amount",
+            4: "user__username",
+            5: "shop__abbrev",
+        }
+        column_sort_fields = column_filter_fields.copy()
+        column_filter_types = {
+            "title": "contains",
+            "amount": "numeric",
+            "user__username": "exact",
+            "shop__abbrev": "exact",
+        }
+
+        result = DataTableProcessor.process_request(
+            request=request,
+            queryset=qs,
+            global_search_fields=["title", "amount", "user__username", "user__fullname", "shop__abbrev", "shop__names"],
+            column_filter_fields=column_filter_fields,
+            column_filter_types=column_filter_types,
+            column_sort_fields=column_sort_fields,
+            date_field='dates',
+        )
+
+        totals = result['full_queryset'].aggregate(t_amt=Sum('amount'))
+
+        start_idx = int(request.POST.get("start", 0))
+
         final_data = [{
-            'count': int(request.POST.get('start', 0)) + i + 1,
+            "count": start_idx + i + 1,
             'id': item.id, 'dates': item.dates.strftime('%d-%b-%Y'),
             'title': item.title, 'amount': format_number(item.amount),
             'describe': item.description or "", 'shop': item.shop.abbrev,
             'user': item.user.username, 'action': ""
-        } for i, item in enumerate(dt['data'])]
-
-        return JsonResponse({
-            'draw': dt['draw'], 'recordsTotal': dt['recordsTotal'], 'data': final_data,
-            'recordsFiltered': dt['recordsFiltered'], 'total_amount': format_number(totals['t_amt'] or 0)
-        })
-    return render(request, 'miamala/expenses.html', {'shops': Shop.objects.all().order_by('names')})
+        } for i, item in enumerate(result['data'])]
+        
+        return JsonResponse(
+            {
+                "draw": result["draw"], 
+                "recordsTotal": result["recordsTotal"],
+                "recordsFiltered": result["recordsFiltered"], 
+                "data": final_data,
+                'total_amount': format_number(totals['t_amt'] or 0)
+            }
+        )
+    shops = Shop.objects.all().order_by('names')
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'miamala/expenses.html', {'shops': shops, 'users': users})
 
 @never_cache
 @login_required
@@ -517,23 +586,57 @@ def mauzo(request: HttpRequest) -> HttpResponse:
         qs = Mauzo.objects.filter(deleted=False).select_related('user', 'shop')
         if not request.user.is_admin:
             qs = qs.filter(shop=request.user.shop)
-        cols = {1: 'dates', 2: 'amount', 3: 'shop__abbrev'}
         
-        dt = DataTablesEngine.handle_request(request, qs, ['description'], cols, ['amount'])
-        totals = dt['full_queryset'].aggregate(t_amt=Sum('amount'))
-        
+        column_filter_fields = {
+            1: "dates",
+            2: "amount",
+            3: "user__username",
+            4: "shop__abbrev",
+        }
+        column_sort_fields = column_filter_fields.copy()
+        column_filter_types = {
+            "amount": "numeric",
+            "user__username": "exact",
+            "shop__abbrev": "exact",
+        }
+        global_search = [
+            "amount", "user__username", "user__fullname",
+            "shop__abbrev", "shop__names"
+            ]
+
+        result = DataTableProcessor.process_request(
+            request=request,
+            queryset=qs,
+            global_search_fields=global_search,
+            column_filter_fields=column_filter_fields,
+            column_filter_types=column_filter_types,
+            column_sort_fields=column_sort_fields,
+            date_field='dates',
+        )
+
+        totals = result['full_queryset'].aggregate(t_amt=Sum('amount'))
+
+        start_idx = int(request.POST.get("start", 0))
+
         final_data = [{
-            'count': int(request.POST.get('start', 0)) + i + 1,
+            'count': start_idx + i + 1,
             'id': item.id, 'dates': item.dates.strftime('%d-%b-%Y'),
             'amount': format_number(item.amount), 'describe': item.description or "",
             'shop': item.shop.abbrev, 'user': item.user.username, 'action': ""
-        } for i, item in enumerate(dt['data'])]
-
-        return JsonResponse({
-            'draw': dt['draw'], 'recordsTotal': dt['recordsTotal'], 'data': final_data,
-            'recordsFiltered': dt['recordsFiltered'], 'total_amount': format_number(totals['t_amt'] or 0)
-        })
-    return render(request, 'miamala/mauzo.html', {'shops': Shop.objects.all().order_by('names')})
+        } for i, item in enumerate(result['data'])]
+        
+        return JsonResponse(
+            {
+                'draw': result['draw'],
+                'recordsTotal': result['recordsTotal'],
+                'recordsFiltered': result['recordsFiltered'],
+                'data': final_data,
+                'total_amount': format_number(totals['t_amt'] or 0)
+            }
+        )
+    shops = Shop.objects.all().order_by('names')
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'miamala/mauzo.html', {'shops': shops, 'users': users})
 
 # --- ACTION ROUTERS ---
 

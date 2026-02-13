@@ -23,9 +23,11 @@ class LoansManager {
       updateLoanModal: "#update_loan_modal",
       deleteLoanModal: "#delete_loan_modal",
       dateFilterModal: "#dateFilterModal",
+
       // Form fields
       loanNames: "#loan_names",
       loanShopname: "#loan_shopname",
+      loanUser: "#loan_users",
       loanAmount: "#loan_amount",
       loanDescription: "#loan_description",
       loanEditNames: "#loan_edit_names",
@@ -35,6 +37,7 @@ class LoansManager {
       loanEditDescription: "#loan_edit_description",
       loanId: "#loan_id",
       loanDelId: "#loan_del_id",
+
       // Buttons
       newLoanBtn: "#new_loan_btn",
       loanEditBtn: "#loan_edit_btn",
@@ -42,6 +45,8 @@ class LoansManager {
     };
 
     this.table = null;
+    this.shopOptions = null;
+    this.userOptions = null;
     this.init();
   }
 
@@ -58,6 +63,8 @@ class LoansManager {
    */
   init() {
     $(this.selectors.transactionsToggle).click();
+    this.shopOptions = $(`${this.selectors.loanShopname} option`);
+    this.userOptions = $(`${this.selectors.loanUser} option`);
     this.setupFormHandlers();
     this.setupTable();
     this.setupEventHandlers();
@@ -542,6 +549,10 @@ class LoansManager {
             </button>
           `;
           cell.html(calendar).addClass("text-center");
+        } else if (colIdx === 6) {
+          this.setupShopFilter(cell, api, colIdx);
+        } else if (colIdx === 7) {
+          this.setupUserFilter(cell, api, colIdx);
         } else {
           cell
             .html(
@@ -551,6 +562,45 @@ class LoansManager {
           this.setupColumnFilter(cell, api, colIdx);
         }
       });
+  }
+
+  /**
+   * Setup user filter dropdown
+   */
+  setupUserFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.userOptions.each((index, option) => {
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
+  }
+
+  /**
+   * Setup shop filter dropdown
+   */
+  setupShopFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.shopOptions.each((index, option) => {
+      if (index === 0) return;
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
   }
 
   /**
@@ -609,6 +659,7 @@ class LoansManager {
         $(this.selectors.searchField).val("");
         this.clearDates();
         $('.filters input[type="text"]').val("");
+        $(".filters select").val("");
         this.table.search("").columns().search("").draw();
       });
 

@@ -16,6 +16,7 @@ class SelcomManager {
       newNames: "#sel_names",
       newAmount: "#sel_amount",
       newShopName: "#sel_shopname",
+      selcomUsers: "#selcom_users",
       newDescription: "#sel_description",
       newSubmitBtn: "#sel_trans_btn",
 
@@ -48,6 +49,8 @@ class SelcomManager {
     };
 
     this.table = null;
+    this.shopOptions = null;
+    this.userOptions = null;
     this.init();
   }
 
@@ -64,6 +67,8 @@ class SelcomManager {
    */
   init() {
     $(this.selectors.transactionsToggle).click();
+    this.shopOptions = $(`${this.selectors.newShopName} option`);
+    this.userOptions = $(`${this.selectors.selcomUsers} option`);
     this.setupFormHandlers();
     this.setupTable();
     this.setupEventHandlers();
@@ -482,6 +487,10 @@ class SelcomManager {
             </button>
           `;
           cell.html(calendar).addClass("text-center");
+        } else if (colIdx === 5) {
+          this.setupShopFilter(cell, api, colIdx);
+        } else if (colIdx === 6) {
+          this.setupUserFilter(cell, api, colIdx);
         } else {
           cell.html(
             "<input type='text' class='text-charcoal' placeholder='Filter..'/>",
@@ -490,6 +499,45 @@ class SelcomManager {
           this.setupColumnFilter(cell, api, colIdx);
         }
       });
+  }
+
+  /**
+   * Setup user filter dropdown
+   */
+  setupUserFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.userOptions.each((index, option) => {
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
+  }
+
+  /**
+   * Setup shop filter dropdown
+   */
+  setupShopFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.shopOptions.each((index, option) => {
+      if (index === 0) return;
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
   }
 
   /**
@@ -550,6 +598,7 @@ class SelcomManager {
         $(this.selectors.minDate).val("");
         $(this.selectors.maxDate).val("");
         $('.filters input[type="text"]').val("");
+        $(".filters select").val("");
         this.table.search("").columns().search("").draw();
       });
 

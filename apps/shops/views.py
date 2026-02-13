@@ -16,28 +16,13 @@ from .forms import ShopForm, ShopUpdateForm, ProductForm, ProductUpdateForm
 from .models import Shop, Product, Cart, Sales, Sale_items
 from apps.users.models import CustomUser
 from apps.miamala.models import Expenses, Debts, Loans, Selcompay, Lipanamba
-from utils.util_functions import admin_required, conv_timezone, format_number
+from utils.util_functions import admin_required, conv_timezone, format_number, DataTableProcessor
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-def get_numeric_filter(field_name: str, search_value: str) -> Optional[Q]:
-    """Database-level numeric filtering matching filter_items() logic"""
-    try:
-        search_value = search_value.replace(',', '').strip()
-        if search_value.startswith('-') and search_value[1:].replace('.', '', 1).isdigit():
-            return Q(**{f"{field_name}__lte": float(search_value[1:])})
-        elif search_value.endswith('-') and search_value[:-1].replace('.', '', 1).isdigit():
-            return Q(**{f"{field_name}__gte": float(search_value[:-1])})
-        elif search_value.replace('.', '', 1).isdigit():
-            return Q(**{field_name: float(search_value)})
-    except (ValueError, TypeError):
-        pass
-    return None
 
-# =============================================
 # SHOP MANAGEMENT SERVICES
-# =============================================
 class ShopManagementService:
     """Service class for handling shop management operations"""
 
@@ -190,10 +175,7 @@ class ShopManagementService:
                 return form.errors[field_name][0]
         return "Unknown error, reload & try again"
 
-# =============================================
 # PRODUCT MANAGEMENT SERVICES
-# =============================================
-
 class ProductManagementService:
     """Service class for handling product management operations"""
 
@@ -476,10 +458,7 @@ class ProductManagementService:
                 return form.errors[field_name][0]
         return "Unknown error, reload & try again"
 
-# =============================================
 # SALES MANAGEMENT SERVICES
-# =============================================
-
 class SalesManagementService:
     """Service class for handling sales operations"""
 
@@ -734,90 +713,7 @@ class SalesManagementService:
             logger.error(f"Error deleting sale {sale_id}: {str(e)}")
             return {'success': False, 'sms': 'Failed to delete sale.'}
 
-# =============================================
-# DATATABLES ENGINE (OPTIMIZED)
-# =============================================
-
-class DataTablesEngine:
-    """Core engine to handle DB-level DataTables operations with correct record counting"""
-    
-    @staticmethod
-    def handle_request(request: HttpRequest, queryset: QuerySet, search_fields: List[str],
-        column_map: Dict[int, str], numeric_fields: List[str] = None, date_field: str = 'created_at',
-        user_shop_filter: bool = False, user=None) -> Dict[str, Any]:
-        
-        if user_shop_filter and user and not user.is_admin:
-            queryset = queryset.filter(shop=user.shop)
-        
-        records_total = queryset.count()
-        
-        draw = int(request.POST.get('draw', 1))
-        start = int(request.POST.get('start', 0))
-        length = int(request.POST.get('length', 10))
-        search_val = request.POST.get('search[value]', '').strip()
-        
-        start_date = request.POST.get('startdate')
-        end_date = request.POST.get('enddate')
-        
-        if start_date:
-            try:
-                queryset = queryset.filter(**{f"{date_field}__gte": parse(start_date)})
-            except:
-                pass
-        if end_date:
-            try:
-                queryset = queryset.filter(**{f"{date_field}__lte": parse(end_date)})
-            except:
-                pass
-        
-        if search_val:
-            q_obj = Q()
-            for field in search_fields:
-                q_obj |= Q(**{f"{field}__icontains": search_val})
-            queryset = queryset.filter(q_obj)
-        
-        for i in range(len(column_map)):
-            col_search = request.POST.get(f'columns[{i}][search][value]', '').strip()
-            if col_search:
-                field = column_map.get(i)
-                if numeric_fields and field in numeric_fields:
-                    num_q = get_numeric_filter(field, col_search)
-                    if num_q:
-                        queryset = queryset.filter(num_q)
-                else:
-                    queryset = queryset.filter(**{f"{field}__icontains": col_search})
-        
-        records_filtered = queryset.count()
-        
-        order_idx = int(request.POST.get('order[0][column]', 1))
-        order_dir = request.POST.get('order[0][dir]', 'desc')
-        sort_field = column_map.get(order_idx, date_field)
-        if (numeric_fields and sort_field in numeric_fields) or sort_field == date_field:
-            ordering = sort_field
-            if order_dir == 'desc':
-                ordering = f"-{sort_field}"
-            queryset = queryset.order_by(ordering)
-        else:
-            sort_expression = Lower(sort_field)
-            if order_dir == 'desc':
-                queryset = queryset.order_by(sort_expression.desc())
-            else:
-                queryset = queryset.order_by(sort_expression.asc())
-        
-        paged_data = queryset[start:start+length] if length > 0 else queryset
-        
-        return {
-            'draw': draw,
-            'recordsTotal': records_total,
-            'recordsFiltered': records_filtered,
-            'data': paged_data,
-            'full_queryset': queryset
-        }
-
-# =============================================
-# DATATABLES SERVICES (OPTIMIZED)
-# =============================================
-
+# DATATABLES SERVICES
 class ShopDataTablesService:
     """Service class for handling shop DataTables functionality"""
 
@@ -842,35 +738,58 @@ class ShopDataTablesService:
                 )
             )
             
-            dt_result = DataTablesEngine.handle_request(
+            column_filter_fields = {
+                1: "names",
+                2: "abbrev",
+                3: "created_at",
+                4: "users_count",
+                5: "items_count",
+                6: "networth",
+            }
+            column_sort_fields = column_filter_fields.copy()
+            column_filter_types = {
+                "names": "contains",
+                "abbrev": "contains",
+                "users_count": "numeric",
+                "items_count": "numeric",
+                "networth": "numeric",
+            }
+            global_search = [
+                "names", "abbrev", "users_count", "items_count", "networth"
+                ]
+
+            result = DataTableProcessor.process_request(
                 request=request,
                 queryset=queryset,
-                search_fields=['names', 'abbrev'],
-                column_map={0: 'id', 1: 'names', 2: 'abbrev', 3: 'created_at', 4: 'users_count', 5: 'items_count', 6: 'networth'},
-                numeric_fields=['users_count', 'items_count', 'networth']
+                global_search_fields=global_search,
+                column_filter_fields=column_filter_fields,
+                column_filter_types=column_filter_types,
+                column_sort_fields=column_sort_fields,
+                date_field='created_at',
             )
+
+            start_idx = int(request.POST.get("start", 0))
+
+            final_data = [{
+                'count': start_idx + i + 1,
+                'id': item.id,
+                'regdate': conv_timezone(item.created_at, '%d-%b-%Y'),
+                'names': item.names,
+                'abbrev': item.abbrev,
+                'users_count': format_number(item.users_count),
+                'items_count': format_number(item.items_count),
+                'networth': format_number(item.networth) + " TZS",
+                'info': reverse('shop_details', kwargs={'shopid': item.id})
+            } for i, item in enumerate(result['data'])]
             
-            final_data = []
-            for i, item in enumerate(dt_result['data']):
-                final_data.append({
-                    'count': int(request.POST.get('start', 0)) + i + 1,
-                    'id': item.id,
-                    'regdate': conv_timezone(item.created_at, '%d-%b-%Y'),
-                    'names': item.names,
-                    'abbrev': item.abbrev,
-                    'users_count': format_number(item.users_count),
-                    'items_count': format_number(item.items_count),
-                    'networth': format_number(item.networth) + " TZS",
-                    'info': reverse('shop_details', kwargs={'shopid': item.id})
-                })
-            
-            return JsonResponse({
-                'draw': dt_result['draw'],
-                'recordsTotal': dt_result['recordsTotal'],
-                'recordsFiltered': dt_result['recordsFiltered'],
-                'data': final_data
-            })
-            
+            return JsonResponse(
+                {
+                    'draw': result['draw'],
+                    'recordsTotal': result['recordsTotal'],
+                    'recordsFiltered': result['recordsFiltered'],
+                    'data': final_data,
+                }
+            )
         except Exception as e:
             logger.error(f"Error in ShopDataTablesService: {str(e)}")
             return JsonResponse({
@@ -900,36 +819,57 @@ class ProductDataTablesService:
             if not request.user.is_admin:
                 queryset = queryset.filter(shop=request.user.shop)
             
-            dt_result = DataTablesEngine.handle_request(
+            column_filter_fields = {
+                1: "name",
+                2: "shop__abbrev",
+                3: "qty",
+                4: "cost",
+                5: "price",
+                6: "status_display",
+            }
+            column_sort_fields = column_filter_fields.copy()
+            column_filter_types = {
+                "name": "contains",
+                "qty": "numeric",
+                "cost": "numeric",
+                "price": "numeric",
+                "shop__abbrev": "exact",
+                "status_display": "exact",
+            }
+            global_search = ["name", "shop__abbrev", "shop__names"]
+
+            result = DataTableProcessor.process_request(
                 request=request,
                 queryset=queryset,
-                search_fields=['name', 'shop__abbrev'],
-                column_map={0: 'id', 1: 'name', 2: 'shop__abbrev', 3: 'qty', 4: 'cost', 5: 'price', 6: 'status_display'},
-                numeric_fields=['qty', 'cost', 'price'],
-                user_shop_filter=False,
-                user=request.user
+                global_search_fields=global_search,
+                column_filter_fields=column_filter_fields,
+                column_filter_types=column_filter_types,
+                column_sort_fields=column_sort_fields,
+                date_field='created_at',
             )
+
+            start_idx = int(request.POST.get("start", 0))
+
+            final_data = [{
+                'count': start_idx + i + 1,
+                'id': item.id,
+                'name': item.name,
+                'shop': item.shop.abbrev,
+                'qty': format_number(item.qty),
+                'cost': format_number(item.cost) + " TZS",
+                'price': format_number(item.price) + " TZS",
+                'status': item.status_display,
+                'info': reverse('product_details', kwargs={'itemid': item.id})
+            } for i, item in enumerate(result['data'])]
             
-            final_data = []
-            for i, item in enumerate(dt_result['data']):
-                final_data.append({
-                    'count': int(request.POST.get('start', 0)) + i + 1,
-                    'id': item.id,
-                    'name': item.name,
-                    'shop': item.shop.abbrev,
-                    'qty': format_number(item.qty),
-                    'cost': format_number(item.cost) + " TZS",
-                    'price': format_number(item.price) + " TZS",
-                    'status': item.status_display,
-                    'info': reverse('product_details', kwargs={'itemid': item.id})
-                })
-            
-            return JsonResponse({
-                'draw': dt_result['draw'],
-                'recordsTotal': dt_result['recordsTotal'],
-                'recordsFiltered': dt_result['recordsFiltered'],
-                'data': final_data
-            })
+            return JsonResponse(
+                {
+                    'draw': result['draw'],
+                    'recordsTotal': result['recordsTotal'],
+                    'recordsFiltered': result['recordsFiltered'],
+                    'data': final_data,
+                }
+            )
             
         except Exception as e:
             logger.error(f"Error in ProductDataTablesService: {str(e)}")
@@ -965,35 +905,50 @@ class SalesDataTablesService:
                 cart_qty=Coalesce(Subquery(cart_subquery), Value(0, output_field=DecimalField()))
             )
             
-            dt_result = DataTablesEngine.handle_request(
+            column_filter_fields = {
+                1: "name",
+                2: "qty",
+                3: "price",
+            }
+            column_sort_fields = column_filter_fields.copy()
+            column_filter_types = {
+                "name": "contains",
+                "qty": "numeric",
+                "price": "numeric",
+            }
+            global_search = ["name", "shop__abbrev"]
+
+            result = DataTableProcessor.process_request(
                 request=request,
                 queryset=queryset,
-                search_fields=['name'],
-                column_map={0: 'id', 1: 'name', 2: 'qty', 3: 'price'},
-                numeric_fields=['qty', 'price'],
-                user_shop_filter=False,
-                user=request.user
+                global_search_fields=global_search,
+                column_filter_fields=column_filter_fields,
+                column_filter_types=column_filter_types,
+                column_sort_fields=column_sort_fields,
+                date_field='created_at',
             )
+
+            start_idx = int(request.POST.get("start", 0))
+
+            final_data = [{
+                'count': start_idx + i + 1,
+                'id': item.id,
+                'name': item.name,
+                'qty': format_number(item.qty),
+                'price': format_number(item.price) + " TZS",
+                'sell_qty': format_number(item.qty),
+                'cart': format_number(item.cart_qty),
+                'action': ''
+            } for i, item in enumerate(result['data'])]
             
-            final_data = []
-            for i, item in enumerate(dt_result['data']):
-                final_data.append({
-                    'count': int(request.POST.get('start', 0)) + i + 1,
-                    'id': item.id,
-                    'name': item.name,
-                    'qty': format_number(item.qty),
-                    'price': format_number(item.price) + " TZS",
-                    'sell_qty': format_number(item.qty),
-                    'cart': format_number(item.cart_qty),
-                    'action': ''
-                })
-            
-            return JsonResponse({
-                'draw': dt_result['draw'],
-                'recordsTotal': dt_result['recordsTotal'],
-                'recordsFiltered': dt_result['recordsFiltered'],
-                'data': final_data
-            })
+            return JsonResponse(
+                {
+                    'draw': result['draw'],
+                    'recordsTotal': result['recordsTotal'],
+                    'recordsFiltered': result['recordsFiltered'],
+                    'data': final_data,
+                }
+            )
             
         except Exception as e:
             logger.error(f"Error in SalesDataTablesService: {str(e)}")
@@ -1012,17 +967,38 @@ class SalesReportDataTablesService:
     def handle_request(request: HttpRequest) -> JsonResponse:
         try:
             queryset = Sales.objects.all().select_related('shop', 'user')
+
+            if not request.user.is_admin:
+                queryset = queryset.filter(shop=request.user.shop)
             
-            dt_result = DataTablesEngine.handle_request(
+            column_filter_fields = {
+                2: "created_at",
+                3: "shop__abbrev",
+                4: "amount",
+                5: "profit",
+                6: "customer",
+                7: "user__username"
+            }
+            column_sort_fields = column_filter_fields.copy()
+            column_filter_types = {
+                "shop__abbrev": "exact",
+                "user__username": "exact",
+                "customer": "contains",
+                "amount": "numeric",
+                "profit": "numeric",
+            }
+            global_search = ["shop__abbrev", "customer", "user__username"]
+
+            dt_result = DataTableProcessor.process_request(
                 request=request,
                 queryset=queryset,
-                search_fields=['customer', 'user__username', 'shop__abbrev'],
-                column_map={0: 'sales_items', 1: 'id', 2: 'created_at', 3: 'shop__abbrev', 4: 'amount', 5: 'profit', 6: 'customer', 7: 'user__username'},
-                numeric_fields=['amount', 'profit'],
-                user_shop_filter=True,
-                user=request.user
+                global_search_fields=global_search,
+                column_filter_fields=column_filter_fields,
+                column_filter_types=column_filter_types,
+                column_sort_fields=column_sort_fields,
+                date_field='created_at',
             )
-            
+
             sale_ids = [sale.id for sale in dt_result['data']]
             sale_items_map = {}
             if sale_ids:
@@ -1091,42 +1067,65 @@ class SalesItemsReportDataTablesService:
                 )
             )
             
-            dt_result = DataTablesEngine.handle_request(
+            if not request.user.is_admin:
+                queryset = queryset.filter(sale__shop=request.user.shop)
+
+            column_filter_fields = {
+                1: "sale__created_at",
+                2: "sale__shop__abbrev",
+                3: "product__name",
+                4: "price",
+                5: "qty",
+                6: "amount_total",
+                7: "profit",
+                8: "user_display"
+            }
+            column_sort_fields = column_filter_fields.copy()
+            column_filter_types = {
+                "sale__shop__abbrev": "exact",
+                "product__name": "contains",
+                "price": "numeric",
+                "qty": "numeric",
+                "amount_total": "numeric",
+                "profit": "numeric",
+                "user_display": "exact",
+            }
+            global_search = ["sale__shop__abbrev", "product__name", "user_display"]
+
+            result = DataTableProcessor.process_request(
                 request=request,
                 queryset=queryset,
-                search_fields=['product__name', 'sale__shop__abbrev', 'sale__user__username'],
-                column_map={0: 'id', 1: 'sale__created_at', 2: 'sale__shop__abbrev', 3: 'product__name', 
-                          4: 'price', 5: 'qty', 6: 'amount_total', 7: 'profit', 8: 'user_display'},
-                numeric_fields=['price', 'qty', 'amount_total', 'profit'],
+                global_search_fields=global_search,
+                column_filter_fields=column_filter_fields,
+                column_filter_types=column_filter_types,
+                column_sort_fields=column_sort_fields,
                 date_field='sale__created_at',
-                user_shop_filter=True,
-                user=request.user
             )
+
+            start_idx = int(request.POST.get("start", 0))
+
+            final_data = [{
+                'count': start_idx + i + 1,
+                'id': item.id,
+                'saledate': conv_timezone(item.sale.created_at, '%d-%b-%Y %H:%M:%S'),
+                'shop': item.sale.shop.abbrev,
+                'product': item.product.name,
+                'price': format_number(item.price) + " TZS",
+                'qty': format_number(item.qty),
+                'amount': format_number(item.amount_total) + " TZS",
+                'profit': format_number(item.profit) + " TZS",
+                'user': item.user_display
+            } for i, item in enumerate(result['data'])]
             
-            final_data = []
-            for i, item in enumerate(dt_result['data']):
-                final_data.append({
-                    'count': int(request.POST.get('start', 0)) + i + 1,
-                    'id': item.id,
-                    'saledate': conv_timezone(item.sale.created_at, '%d-%b-%Y %H:%M:%S'),
-                    'shop': item.sale.shop.abbrev,
-                    'product': item.product.name,
-                    'price': format_number(item.price) + " TZS",
-                    'qty': format_number(item.qty),
-                    'amount': format_number(item.amount_total) + " TZS",
-                    'profit': format_number(item.profit) + " TZS",
-                    'user': item.user_display
-                })
-            
-            totals = dt_result['full_queryset'].aggregate(
+            totals = result['full_queryset'].aggregate(
                 total_amount=Sum('amount_total'),
                 total_profit=Sum('profit')
             )
             
             return JsonResponse({
-                'draw': dt_result['draw'],
-                'recordsTotal': dt_result['recordsTotal'],
-                'recordsFiltered': dt_result['recordsFiltered'],
+                'draw': result['draw'],
+                'recordsTotal': result['recordsTotal'],
+                'recordsFiltered': result['recordsFiltered'],
                 'data': final_data,
                 'grand_total': format_number(totals['total_amount'] or 0) + " TZS",
                 'grand_profit': format_number(totals['total_profit'] or 0) + " TZS"
@@ -1142,10 +1141,7 @@ class SalesItemsReportDataTablesService:
                 'error': 'Failed to load data'
             })
 
-# =============================================
 # VIEW FUNCTIONS
-# =============================================
-
 @never_cache
 @login_required
 @require_POST
@@ -1417,7 +1413,8 @@ def sales_report(request: HttpRequest) -> HttpResponse:
         return SalesReportDataTablesService.handle_request(request)
     
     shops = Shop.objects.all() if request.user.is_admin else Shop.objects.filter(id=request.user.shop_id)
-    return render(request, 'shops/sales_report.html', {'shops': shops.order_by('-created_at')})
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'shops/sales_report.html', {'shops': shops.order_by('-created_at'), 'users': users})
 
 @never_cache
 @login_required
@@ -1435,4 +1432,5 @@ def sales_items_report(request: HttpRequest) -> HttpResponse:
         return SalesItemsReportDataTablesService.handle_request(request)
     
     shops = Shop.objects.all().order_by('-created_at')
-    return render(request, 'shops/items_report.html', {'shops': shops})
+    users = CustomUser.objects.filter(is_active=True, deleted=False).order_by('username')
+    return render(request, 'shops/items_report.html', {'shops': shops, 'users': users})

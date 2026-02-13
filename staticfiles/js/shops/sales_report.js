@@ -10,6 +10,7 @@ class SalesReportManager {
       table: "#reports_table",
       salesReportUrl: "#sales_report_url",
       shopsList: "#shops_list",
+      usersList: "#salesreport_users",
       searchInput: "#sales_search",
       clearFilter: "#sales_filter_clear",
       minDate: "#min_date",
@@ -470,6 +471,21 @@ class SalesReportManager {
           select.className = "select-filter text-charcoal float-start";
           select.innerHTML = `<option value="">All</option>`;
           $(this.selectors.shopsList)
+            .find("option")
+            .each((_, opt) => {
+              select.innerHTML += `<option value="${$(opt).text()}">${$(
+                opt,
+              ).text()}</option>`;
+            });
+          cell.html(select);
+          $(select).on("change", () =>
+            api.column(colIdx).search($(select).val()).draw(),
+          );
+        } else if (colIdx === 7) {
+          const select = document.createElement("select");
+          select.className = "select-filter text-charcoal float-start";
+          select.innerHTML = `<option value="">All</option>`;
+          $(this.selectors.usersList)
             .find("option")
             .each((_, opt) => {
               select.innerHTML += `<option value="${$(opt).text()}">${$(

@@ -590,6 +590,7 @@ class ProductsManager {
       <option value="Active">Active</option>
       <option value="Blocked">Blocked</option>
       <option value="SoldOut">SoldOut</option>
+      <option value="Expired">Expired</option>
     `;
 
     cell.html(select);

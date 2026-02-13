@@ -10,6 +10,7 @@ class ItemsReportManager {
       table: "#items_report",
       saleItemsReportUrl: "#sale_items_report",
       shopsList: "#shops_list",
+      usersList: "#saleitems_users",
       searchInput: "#items_search",
       clearFilter: "#items_filter_clear",
       minDate: "#min_date",
@@ -452,6 +453,21 @@ class ItemsReportManager {
           select.className = "select-filter text-charcoal float-start";
           select.innerHTML = `<option value="">All</option>`;
           $(this.selectors.shopsList)
+            .find("option")
+            .each((_, opt) => {
+              select.innerHTML += `<option value="${$(opt).text()}">${$(
+                opt,
+              ).text()}</option>`;
+            });
+          cell.html(select);
+          $(select).on("change", () =>
+            api.column(colIdx).search($(select).val()).draw(),
+          );
+        } else if (colIdx === 8) {
+          const select = document.createElement("select");
+          select.className = "select-filter text-charcoal float-start";
+          select.innerHTML = `<option value="">All</option>`;
+          $(this.selectors.usersList)
             .find("option")
             .each((_, opt) => {
               select.innerHTML += `<option value="${$(opt).text()}">${$(

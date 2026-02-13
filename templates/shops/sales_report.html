@@ -87,6 +87,15 @@
         <option value="{{ shop.id }}">{{ shop.abbrev }}</option>
     {% endfor %}
   </select>
+  <select id="salesreport_users" class="d-none">
+    {% if not request.user.is_admin %}
+      <option value="{{ request.user.username }}">{{ request.user.username }}</option>
+    {% else %}
+      {% for user in users %}
+        <option value="{{ user.username }}">{{ user.username }}</option>
+      {% endfor %}
+    {% endif %}
+  </select>
 {% endblock %}
 {% block scripts %}
   <script src="{% static 'datatables/datatables.min.js' %}"></script>

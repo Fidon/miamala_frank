@@ -28,9 +28,13 @@ class ExpensesManager {
       updateExpModal: "#update_exp_modal",
       deleteExpModal: "#delete_exp_modal",
       dateFilterModal: "#dateFilterModal",
+      expenseShops: "#exp_shop",
+      expenseUsers: "#exp_users",
     };
 
     this.table = null;
+    this.shopOptions = null;
+    this.userOptions = null;
     this.init();
   }
 
@@ -46,6 +50,8 @@ class ExpensesManager {
    * Initialize the application
    */
   init() {
+    this.shopOptions = $(`${this.selectors.expenseShops} option`);
+    this.userOptions = $(`${this.selectors.expenseUsers} option`);
     this.setupFormHandlers();
     this.setupTable();
     this.setupEventHandlers();
@@ -478,8 +484,8 @@ class ExpensesManager {
       type: "POST",
       data: (d) => {
         const dateRange = this.getDateRange();
-        d.start_date = dateRange.start;
-        d.end_date = dateRange.end;
+        d.startdate = dateRange.start;
+        d.enddate = dateRange.end;
       },
       dataType: "json",
       headers: { "X-CSRFToken": this.config.csrfToken },
@@ -578,6 +584,10 @@ class ExpensesManager {
             </button>
           `;
           cell.html(calendar).addClass("text-center");
+        } else if (colIdx === 4) {
+          this.setupUserFilter(cell, api, colIdx);
+        } else if (colIdx === 5) {
+          this.setupShopFilter(cell, api, colIdx);
         } else {
           cell
             .html(
@@ -587,6 +597,45 @@ class ExpensesManager {
           this.setupColumnFilter(cell, api, colIdx);
         }
       });
+  }
+
+  /**
+   * Setup user filter dropdown
+   */
+  setupUserFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.userOptions.each((index, option) => {
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
+  }
+
+  /**
+   * Setup shop filter dropdown
+   */
+  setupShopFilter(cell, api, colIdx) {
+    const select = document.createElement("select");
+    select.className = "select-filter text-charcoal float-start";
+    select.innerHTML = `<option value="">All</option>`;
+
+    this.shopOptions.each((index, option) => {
+      if (index === 0) return;
+      const optionText = $(option).text();
+      select.innerHTML += `<option value="${optionText}">${optionText}</option>`;
+    });
+
+    cell.html(select);
+    $(select).on("change", function () {
+      api.column(colIdx).search($(this).val()).draw();
+    });
   }
 
   /**
@@ -670,6 +719,7 @@ class ExpensesManager {
         $(this.selectors.searchInput).val("");
         this.clearDates();
         $('.filters input[type="text"]').val("");
+        $(".filters select").val("");
         this.table.search("").columns().search("").draw();
       });
 

@@ -250,6 +250,15 @@
     </div>
 
     <input type="hidden" value="{% url 'crips_page' %}" id="crips_list_url" />
+    <select id="crips_users" class="d-none">
+      {% if not request.user.is_admin %}
+        <option value="{{ request.user.username }}">{{ request.user.username }}</option>
+      {% else %}
+        {% for user in users %}
+          <option value="{{ user.username }}">{{ user.username }}</option>
+        {% endfor %}
+      {% endif %}
+    </select>
   {% endif %}
 {% endblock %}
 {% block scripts %}
