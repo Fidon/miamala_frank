@@ -168,7 +168,7 @@ class ProductsManager {
     this.scrollToTop(this.selectors.canvas);
     this.generateAlert(
       false,
-      "Unknown error, reload & try",
+      "Unknown error, reload & try again",
       $(`${this.selectors.form} .formsms`),
     );
   }
@@ -1211,7 +1211,7 @@ class ProductsManager {
     );
     this.generateAlert(
       false,
-      "Unknown error, reload & try",
+      "Unknown error, reload & try again",
       $(`${this.selectors.transferForm} .formsms`),
     );
   }

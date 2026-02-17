@@ -1,7 +1,6 @@
 import re
 from django import forms
 from .models import Shop, Product
-from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
 
@@ -145,8 +144,11 @@ class ProductForm(forms.ModelForm):
     
     def clean_price(self):
         price = self.cleaned_data['price']
+        cost = self.cleaned_data['cost']
         if price < 0:
             raise forms.ValidationError(_("Price cannot be less than 0"))
+        if price < cost:
+            raise forms.ValidationError(_("Price cannot be less than cost"))
         return price
 
     def clean_comment(self):
@@ -191,8 +193,11 @@ class ProductUpdateForm(forms.ModelForm):
     
     def clean_price(self):
         price = self.cleaned_data['price']
+        cost = self.cleaned_data['cost']
         if price < 0:
             raise forms.ValidationError(_("Price cannot be less than 0"))
+        if price < cost:
+            raise forms.ValidationError(_("Price cannot be less than cost"))
         return price
 
     def clean_comment(self):
